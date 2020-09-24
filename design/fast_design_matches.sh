@@ -6,7 +6,6 @@ do
         -linker) linker="$2";; # i.e. ../pAaF/pAaF-product
         -params) params="$2";; #optional, only for ligands of the protein
         -symm) symmetry="$2";; #optional
-        # -dup) duplicated_chains="$2";; #optional
         -nbh) neighborhood="$2";; #optional
         -n) decoys="$2";; #optional
         -mem) memory="$2";; #optional
@@ -46,10 +45,6 @@ then
         ligand=${ligand}" ../../../"${params_file}
     done
 fi
-# if ! [ -z "${duplicated_chains}" ]
-# then
-#     duplicated_chains="-dup "${duplicated_chains[@]}
-# fi
 IFS='
 '
 
