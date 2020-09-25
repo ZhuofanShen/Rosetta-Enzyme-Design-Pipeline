@@ -22,13 +22,9 @@ do
         directories=${directories}" "${scaffold_linker}
         cd ${scaffold_linker}
         mkdir match
-        cp ${scaffold}*/* match
-        # rm -rf ${scaffold}*
-        # make sure that your python3 or anaconda3 has the pymol module installed.
-        # conda config --set auto_activate_base false
-        # eval "$(/home/zs251/anaconda3/bin/conda shell.bash hook)"
+        mv ${scaffold}*/* match
+        rm -rf ${scaffold}*
         python ../../scripts/generate_fast_design_input.py match ${homomeric}
-        # conda deactivate
         cd ..
     fi
 done
