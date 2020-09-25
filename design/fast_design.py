@@ -1,11 +1,4 @@
-'''
-score function
-symmetry
-coord cst
-task factory
-    read tyz cyx from remark lines
-move map
-'''
+#!/usr/bin/python3
 import argparse
 import os
 from pyrosetta import *
