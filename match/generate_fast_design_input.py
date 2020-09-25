@@ -152,9 +152,9 @@ def make_relax_input_files(directory, match_dict, homomeric=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('scaffold_linker', type=str)
+    parser.add_argument('directory', type=str)
     parser.add_argument('-homo', '--homomeric', action='store_true')
     args = parser.parse_args()
 
-    match_dict = collect_output_match_info(args.scaffold_linker)
-    make_relax_input_files(args.scaffold_linker, match_dict, args.homomeric)
+    match_dict = collect_output_match_info(args.directory)
+    make_relax_input_files(args.directory, match_dict, args.homomeric)
