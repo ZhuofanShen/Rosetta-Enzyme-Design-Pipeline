@@ -2,21 +2,20 @@
 while (( $# > 1 ))
 do
     case $1 in
-        -positions) positions="$2";;
+        -pos) position_files="$2";;
+        -homo) homomeric="$2";;
         *) break;
     esac
     shift 2
 done
 
-scaffold=${positions##*/}
-scaffold=${positions##*\\}
-chain=${scaffold##*-}
-
-if [[ ${#chain} > 1 ]]
+if ! [ -z "${homomeric}" ]
 then
     homomeric="--homomeric"
 fi
 
+scaffold=${positions##*/}
+scaffold=${positions##*\\}
 and="-and"
 or="-or"
 for scaffold_linker in `ls`
@@ -34,14 +33,18 @@ do
         mkdir match
         mv ${scaffold}*/* match
         rm -rf ${scaffold}*
-        python3 ../../scripts/generate_fast_design_input.py match ${homomeric}
+        # make sure that your python3 or anaconda3 has the pymol module installed.
+        # conda config --set auto_activate_base false
+        # eval "$(~/anaconda3/bin/conda shell.bash hook)"
+        python ../../scripts/generate_fast_design_input.py match ${homomeric}
+        # conda deactivate
         cd ..
     fi
 done
 
 if [[ ${or} == "-or" ]]
 then
-    python3 ../scripts/find_match_intersection.py ${and}
+    ../scripts/find_match_intersection.py ${and}
 else
-    python3 ../scripts/find_match_intersection.py ${and} ${or}
+    ../scripts/find_match_intersection.py ${and} ${or}
 fi
