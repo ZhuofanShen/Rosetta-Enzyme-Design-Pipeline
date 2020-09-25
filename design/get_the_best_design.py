@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import argparse
 import json
 import os
@@ -6,10 +7,10 @@ import shutil
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('scaffold_linker', type=str)
+    parser.add_argument('directory', type=str, help='$scaffold_$substrate')
     parser.add_argument('-ref', '--reference_pdb', type=str, required=True)
     parser.add_argument('-params', '--params_files', type=str, nargs='*', required=True, help='including params files for both matching residues and protein ligands/cofactors.')
-    parser.add_argument('-extra', '--extra_linker_residue', type=str, nargs='*')
+    parser.add_argument('-linker', '--linker_res_name', type=str)
     parser.add_argument('-homo', '--homomeric', action='store_true')
     return parser.parse_args()
 
@@ -56,16 +57,16 @@ def read_annotated_sequence(annotated_sequence, symmetric):
                 sequence += annotated_sequence[index]
     return sequence, annotation_dict
 
-def insert_linker_residue_into_reference_sequence(reference_sequence, sequence, annotation_dict, extra_linker_residue):
+def insert_linker_residue_into_reference_sequence(reference_sequence, sequence, annotation_dict, linker_res_name):
     extra_res_index_list = list()
     for index, annotation in annotation_dict.items():
-        if annotation[:annotation.find(':')] in extra_linker_residue:
+        if annotation[:annotation.find(':')] == linker_res_name:
             extra_res_index_list.append(int(index)) # sequence string index
     for index in sorted(extra_res_index_list):
         reference_sequence = reference_sequence[:index] + sequence[index] + reference_sequence[index:]
     return reference_sequence
 
-def rename_best_decoy(path_to_variant, initial_ref_seq, extra_linker_residue, symmetric, output_prefix):
+def rename_best_decoy(path_to_variant, initial_ref_seq, linker_res_name, symmetric, output_prefix):
     # get the file name of the best decoy
     scores = load_scores_from_fasc(path_to_variant + '/design')
     stable_scores = extract_n_decoys(scores)
@@ -75,7 +76,7 @@ def rename_best_decoy(path_to_variant, initial_ref_seq, extra_linker_residue, sy
     pose = pose_from_pdb(path_to_variant + '/design/' + name)
     seq, annotation_dict = read_annotated_sequence(pose.annotated_sequence(), symmetric)
     # insert the linker residue into the original reference pose
-    ref_seq = insert_linker_residue_into_reference_sequence(initial_ref_seq, seq, annotation_dict, extra_linker_residue)
+    ref_seq = insert_linker_residue_into_reference_sequence(initial_ref_seq, seq, annotation_dict, linker_res_name)
     # compare the sequences and rename the best decoy with the point mutation information
     for index in range(len(ref_seq)):
         if seq[index] != ref_seq[index]:
@@ -90,11 +91,11 @@ if __name__ == "__main__":
         opts += ' ' + params_file
     init(opts)
     # use as the prefix to renamed the best decoy
-    protein_name = args.scaffold_linker[:args.scaffold_linker.find('_')]
+    protein_name = args.directory[:args.directory.find('_')]
     # load initial reference sequence
     ref_pose = pose_from_pdb(args.reference_pdb)
     initial_ref_seq, ref_annotation_dict = read_annotated_sequence(ref_pose.annotated_sequence(), args.homomeric)
     # insert the linker residue into the initial reference sequence and make comparison
-    for variant in filter(lambda x: x.startswith('X'), os.listdir(args.scaffold_linker)):
+    for variant in filter(lambda x: x.startswith('X'), os.listdir(args.directory)):
         # rename the best decoy of each variant
-        rename_best_decoy(args.scaffold_linker + '/' + variant, initial_ref_seq, args.extra_linker_residue, args.homomeric, protein_name)
+        rename_best_decoy(args.directory + '/' + variant, initial_ref_seq, args.linker_res_name, args.homomeric, protein_name)
