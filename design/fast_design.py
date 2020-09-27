@@ -1,4 +1,12 @@
 #!/usr/bin/python3
+'''
+score function
+symmetry
+coord cst
+task factory
+    read tyz cyx from remark lines
+move map
+'''
 import argparse
 import os
 from pyrosetta import *
@@ -79,11 +87,10 @@ def create_fold_tree(edge_list):
 
 def create_score_fc(sfxn='ref2015', weights=None):
     score_function = create_score_function(sfxn)
-    weights = {'fa_intra_rep_nonprotein':0.45}
-    if weights:
-        for score_item in weights:
-            exec("score_function.set_weight(ScoreType.{}, \
-                weights[score_item])".format(score_item))
+    if sfxn.startswith('ref2015'):
+        score_function.set_weight(ScoreType.fa_intra_rep_nonprotein, 0.995)
+    elif sfxn.startswith('beta_nov16'):
+        score_function.set_weight(ScoreType.fa_intra_rep_nonprotein, 0.45)
     return score_function
 
 def get_match_substrate_pose_indexes(pdb):
