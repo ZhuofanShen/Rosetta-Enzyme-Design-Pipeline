@@ -123,7 +123,7 @@ do
                 mkdir revert_${reverted_point_mutation}
                 cd revert_${reverted_point_mutation}
                 slurmit.py --job ${variant} --mem ${memory} --command "python ../../../../scripts/fast_design.py \
-                    ../${variant}.pdb -sf beta_nov16_cst -params ../../../${linker}/${linker_res_name}_design.params \
+                    ../${variant}.pdb -sf ref2015_cst -params ../../../${linker}/${linker_res_name}_design.params \
                     ../../../${linker}/CYX.params ../../../${linker}/TYZ.params ${params_files} ${symmetry} \
                     -enzdescst ../../../${linker}/${substrate}_design.cst -rmsd True -nataa True \
                     ${point_mutations} ${neighborhood} ${decoys};"
