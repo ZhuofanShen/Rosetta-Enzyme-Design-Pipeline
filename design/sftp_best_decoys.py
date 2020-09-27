@@ -5,8 +5,8 @@ import paramiko
 import xlrd
 
 parser = argparse.ArgumentParser()
-parser.add_argument('directory', type=str, help='/home/netid/protein_stapling/CPG2_pAaF/CPG2-AB_pAaF-product')
-parser.add_argument('-u', '--username', type=str, required=True)
+parser.add_argument('directory', type=str, help='/home/NetID/protein_stapling/CPG2_pAaF/CPG2-AB_pAaF-product')
+parser.add_argument('-u', '--username', type=str, required=True, help='NetID')
 parser.add_argument('-p', '--password', type=str, required=True)
 args = parser.parse_args()
 
