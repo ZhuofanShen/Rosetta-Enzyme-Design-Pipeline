@@ -9,7 +9,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('directory', type=str, help='$scaffold_$substrate')
     parser.add_argument('-ref', '--reference_pdb', type=str, required=True)
-    parser.add_argument('-params', '--params_files', type=str, nargs='*', required=True, help='including params files for both matching residues and protein ligands/cofactors.')
+    parser.add_argument('-params', '--params_files', type=str, nargs='*', required=True, \
+        help='including params files for both matching residues and protein ligands/cofactors.')
     parser.add_argument('-linker', '--linker_res_name', type=str)
     parser.add_argument('-homo', '--homomeric', action='store_true')
     return parser.parse_args()
@@ -32,7 +33,8 @@ def extract_n_decoys(scores, n=1, is_reversed=False):
     stable_scores = dict()
     for score in scores[0:n]:
         # record without considering residue type constraint
-        stable_scores.update({str(score["decoy"]): score["total_score"] - score["res_type_constraint"]})
+        stable_scores.update({str(score["decoy"]): score["total_score"] - \
+            score["res_type_constraint"] - score["coordinate_constraint"]})
     return stable_scores
 
 def read_annotated_sequence(annotated_sequence, symmetric):
