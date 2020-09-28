@@ -17,6 +17,9 @@ done
 if ! [ -z "${symmetry}" ]
 then
     symmetry="-symm ../../../"${symmetry}
+    cst_suffix=_design.cst
+else
+    cst_suffix=.cst
 fi
 
 if ! [ -z "${neighborhood}" ]
@@ -66,7 +69,7 @@ do
         slurmit.py --job ${variant} --mem ${memory} --command "python ../../../../scripts/fast_design.py \
             ../${variant}.pdb -sf ref2015_cst -params ../../../${linker}/${linker_res_name}_design.params \
             ../../../${linker}/CYX.params ../../../${linker}/TYZ.params ${params_files} ${symmetry} \
-            -enzdescst ../../../${linker}/${substrate}_design.cst -rmsd True -nataa True \
+            -enzdescst ../../../${linker}/${substrate}${cst_suffix} -rmsd True -nataa True \
             --enzdes ${neighborhood} ${decoys};"
         cd ../..
         sleep 0.1
