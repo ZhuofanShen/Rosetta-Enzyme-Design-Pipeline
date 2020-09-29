@@ -39,10 +39,15 @@ or make staples within chain A
 
 **Convert output CloudPDB files into FastDesign input files**
 
-Make sure that your Anaconda3 has the pymol module installed.
+Install Anaconda3 and PyMOL
 > conda config --set auto_activate_base false
 
+> conda init
+
 > eval "$(~/anaconda3/bin/conda shell.bash hook)"
+
+Make sure that your Anaconda3 has the pymol module installed.
+> source ~/anaconda3/bin/activate
 
 Make staples across chain A and chain B
 > ../scripts/generate_fast_design_input.sh -pos ../CPG2/CPG2-AB -homo true
