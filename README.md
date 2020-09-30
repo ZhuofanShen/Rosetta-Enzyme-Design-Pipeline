@@ -40,10 +40,8 @@
         /${protein-scaffold}-A_${ligand}-TS // Created by match.sh.
             ...
         /${protein-scaffold}-A_${ligand}-product // Created by match.sh.
-            /${protein-scaffold}-A_${n} // n=1,2,3... Created by match.sh Contains Match output CloudPDB files. Will be removed after running generate_fast_design_input.sh.
+            /${protein-scaffold}-A_${n} // n=1,2,3... Created by match.sh Contains Match output CloudPDB files.
             ...
-            
-            /match // Created by generate_fast_design_input.sh. Contains CloudPDB files for all matches moved from the ${protein-scaffold}-A_${n} folders.
             
             /X${position1}Z${position2} // Created by generate_fast_design_input.sh. Contains FastDesign input files of each match.
                 X${position1}Z${position2}.pdb // Created by generate_fast_design_input.sh.
@@ -59,6 +57,7 @@
                 /revert_${point_mutation4}
                 ...
             /X${position5}Z${position6}
+                ...
             ...
         /${protein-scaffold}-AB_${ligand}-intermediate // created by match.sh
             ...
