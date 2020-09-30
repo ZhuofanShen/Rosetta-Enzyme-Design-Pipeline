@@ -106,7 +106,13 @@ def make_relax_input_files(directory, match_dict, homomeric=False):
                         elif not line.startswith('CONECT'):
                             p_pdb.write(line)
                 cmd.load(output_name + '_main_chain_linker.pdb')
-                cmd.save(output_name + '.pdb', output_name + '_main_chain_linker')
+                try:
+                    cmd.save(output_name + '.pdb', output_name + '_main_chain_linker')
+                except:
+                    print('ERROR:' + match_info_list[2] + ' is not processed correctly!')
+                    cmd.delete('*')
+                    os.chdir('..')
+                    continue
                 cmd.delete(output_name + '_main_chain_linker')
                 os.remove(output_name + '_main_chain_linker.pdb')
                 with open(output_name + '.pdb', 'r+') as p_pdb:
