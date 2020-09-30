@@ -50,7 +50,7 @@ def get_match_point_mutations(enzdes_cst_remarks):
         point_mutation_dict[enzdes_cst_remark[49] + str(int(enzdes_cst_remark[56:59]))] = enzdes_cst_remark[51:54]
     return point_mutation_dict
 
-def make_relax_input_files(directory, match_dict, homomeric=False):
+def make_relax_input_files(directory, match_dict, duplicate_match=False):
     for position, match_info_list in match_dict.items():
         match_prefix = '_'.join(match_info_list[:-1])
         match = match_prefix + '_1.pdb'
@@ -78,7 +78,7 @@ def make_relax_input_files(directory, match_dict, homomeric=False):
             output_name = match_info_list[2]
             os.mkdir(output_name)
             os.chdir(output_name)
-            if homomeric:
+            if duplicate_match:
                 cmd.create('main_chain_linker', 'chain ' + remarks[0][49])
                 cmd.create('duplicate_chain', 'chain ' + remarks[1][49])
                 cmd.align('duplicate_chain', 'main_chain_linker')
@@ -159,8 +159,8 @@ def make_relax_input_files(directory, match_dict, homomeric=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('directory', type=str)
-    parser.add_argument('-homo', '--homomeric', action='store_true')
+    parser.add_argument('-dup', '--duplicate_match', action='store_true')
     args = parser.parse_args()
 
     match_dict = collect_output_match_info(args.directory)
-    make_relax_input_files(args.directory, match_dict, args.homomeric)
+    make_relax_input_files(args.directory, match_dict, args.duplicate_match)
