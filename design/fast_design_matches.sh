@@ -4,7 +4,8 @@ do
     case $1 in
         -pos) position_files="$2";;
         -linker) linker="$2";; # i.e. ../pAaF/pAaF-product
-        -symm) symmetry="$2";; #optional
+        -symm) symmetry="$2";; #optional, symmetric file.
+        -dup) duplicate_match="$2";; # optional
         -nbh) neighborhood="$2";; #optional
         -n) decoys="$2";; #optional
         -mem) memory="$2";;
@@ -17,6 +18,13 @@ done
 if ! [ -z "${symmetry}" ]
 then
     symmetry="-symm ../../../"${symmetry}
+fi
+
+if ! [ -z "${duplicate_match}" ]
+then
+    enzdes_cst_suffix=_symm.cst
+else
+    enzdes_cst_suffix=.cst
 fi
 
 if ! [ -z "${neighborhood}" ]
@@ -66,7 +74,7 @@ do
         slurmit.py --job ${variant} --mem ${memory} --command "python ../../../../scripts/fast_design.py \
             ../${variant}.pdb -sf ref2015_cst -params ../../../${linker}/${linker_res_name}_design.params \
             ../../../${linker}/CYX.params ../../../${linker}/TYZ.params ${params_files} ${symmetry} \
-            -enzdescst ../../../${linker}/${substrate}_design.cst -rmsd True -nataa True \
+            -enzdescst ../../../${linker}/${substrate}${enzdes_cst_suffix} -rmsd True -nataa True \
             --enzdes ${neighborhood} ${decoys};"
         cd ../..
         sleep 0.1
