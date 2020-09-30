@@ -50,7 +50,7 @@ Make sure that your Anaconda3 has the pymol module installed.
 > source ~/anaconda3/bin/activate
 
 Make staples across chain A and chain B
-> ../scripts/generate_fast_design_input.sh -pos ../CPG2/CPG2-AB -homo true
+> ../scripts/generate_fast_design_input.sh -pos ../CPG2/CPG2-AB -dup true
 
 or make staples within chain A
 > ../scripts/generate_fast_design_input.sh -pos ../CPG2/CPG2-A
