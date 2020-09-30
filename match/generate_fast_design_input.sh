@@ -3,15 +3,15 @@ while (( $# > 1 ))
 do
     case $1 in
         -pos) position_files="$2";;
-        -homo) homomeric="$2";;
+        -dup) duplicate_match="$2";; # optional
         *) break;
     esac
     shift 2
 done
 
-if ! [ -z "${homomeric}" ]
+if ! [ -z "${duplicate_match}" ]
 then
-    homomeric="--homomeric"
+    duplicate_match="--duplicate_match"
 fi
 
 scaffold=${position_files##*/}
@@ -25,7 +25,7 @@ do
         do
             if [[ ${pos_part} == ${scaffold}_* ]]
             then
-                python ../../scripts/generate_fast_design_input.py ${pos_part} ${homomeric}
+                python ../../scripts/generate_fast_design_input.py ${pos_part} ${duplicate_match}
             fi
         done
         cd ..
