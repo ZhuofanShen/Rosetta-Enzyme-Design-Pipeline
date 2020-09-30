@@ -21,10 +21,13 @@ do
     then
         directories=${directories}" "${scaffold_linker}
         cd ${scaffold_linker}
-        mkdir match
-        mv ${scaffold}*/* match
-        rm -rf ${scaffold}*
-        python ../../scripts/generate_fast_design_input.py match ${homomeric}
+        for pos_part in `ls`
+        do
+            if [[ ${pos_part} == ${scaffold}_* ]]
+            then
+                python ../../scripts/generate_fast_design_input.py ${pos_part} ${homomeric}
+            fi
+        done
         cd ..
     fi
 done
