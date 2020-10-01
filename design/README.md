@@ -11,17 +11,17 @@ or make staples within chain A
 **Run FastRelax with designed point mutations reverted back to the wild type one by one**
 
 Make staples across chain A and chain B
-> ../scripts/revert_designed_residues.sh -pos ../CPG2/CPG2-AB -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -dup true -nbh 8.0 -n 50 -mem 2000 -get_best true
+> ../scripts/revert_designed_residues.sh -pos ../CPG2/CPG2-AB -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -dup true -nbh 8.0 -n 50 -mem 2000
 
 or make staples within chain A
-> ../scripts/revert_designed_residues.sh -pos ../CPG2/CPG2-A -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -nbh 8.0 -n 50 -mem 2000 -get_best true
+> ../scripts/revert_designed_residues.sh -pos ../CPG2/CPG2-A -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -nbh 8.0 -n 50 -mem 2000
 
 **Generate a .xls file containing the scores of the designed variant and the variants in which one designed point mutation is reverted back to the wild type**
 Make staples across chain A and chain B
-> python ../scripts/generate_scores_table.py CPG2-AB_pAaF-product -params ../pAaF/pAaF-product/AAF_design.params ../pAaF/pAaF-product/CYX.params ../pAaF/pAaF-product/TYZ.params
+> python ../scripts/generate_scores_table.py CPG2-AB_pAaF-product -params ../pAaF/pAaF-product/AAF_ligand.params ../pAaF/pAaF-product/CYX.params ../pAaF/pAaF-product/TYZ.params
 
 or make staples within chain A
-> python ../scripts/generate_scores_table.py CPG2-A_pAaF-product -params ../pAaF/pAaF-product/AAF_design.params ../pAaF/pAaF-product/CYX.params ../pAaF/pAaF-product/TYZ.params
+> python ../scripts/generate_scores_table.py CPG2-A_pAaF-product -params ../pAaF/pAaF-product/AAF_ligand.params ../pAaF/pAaF-product/CYX.params ../pAaF/pAaF-product/TYZ.params
 
 **Download the output PDB files to your local directory**
 
