@@ -60,7 +60,7 @@ def parse_arguments():
 
 def init_pyrosetta_with_opts(args):
     opts = '-ex1 -ex2 -ignore_zero_occupancy false \
-        -use_input_sc -nblist_autoupdate'
+        -use_input_sc' # -nblist_autoupdate
     if args.score_function.startswith('beta_nov16'):
         opts += ' -corrections::beta_nov16'
     if args.params:
