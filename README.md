@@ -26,12 +26,11 @@
             ...
         /${ligand}-product
             ${ligand-3-letter-name}.rotlib.pdb
-            ${ligand-3-letter-name}.params
+            ${ligand-3-letter-name}_ligand.params
             ${matching-residue1-3-letter-name}.params
             ${matching-residue2-3-letter-name}.params
             subs.flags
             ${ligand}-product.cst
-            ${ligand-3-letter-name}_design.params
             ${ligand}-product_design.cst // Optional, for symmetric proteins.
 
     /${protein-scaffold}_${ligand} // manually created
