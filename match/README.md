@@ -40,7 +40,7 @@ or make staples within chain A
 **Convert output CloudPDB files into FastDesign input files**
 
 Install Anaconda3 in the /home/NetID/anaconda3 folder and then install the PyMOL module. If you have installed Anaconda3 on Amarel, skip this step.
-Go to https://repo.anaconda.com/archive/, select the newest Linux-x86_64 version and put it in the /home/NetID directory.
+Go to https://repo.anaconda.com/archive/. Choose the newest Linux-x86_64 version and put it in the /home/NetID directory.
 > bash Anaconda3-2020.07-Linux-x86_64.sh
 
 > conda init
