@@ -34,18 +34,21 @@ def write_score_table(directory, params_files):
     score_sheet = workbook.add_sheet("score")
     num_sheet = workbook.add_sheet("num")
     row = 0
-    for match in sorted(os.listdir(directory)):
+    for match in sorted(filter(lambda x: x.startswith('X'), os.listdir(directory))):
         # design
         num_sheet.write(row, 0, match)
         for design in os.listdir(directory + '/' + match):
             if design.startswith(scaffold + '_'):
                 break
-        design_new_name = scaffold + '_'
+        design_new_name = scaffold
         pose = pose_from_pdb(directory + '/' + match + '/' + design)
-        pose_info = pose.pose_info()
+        pdb_info = pose.pdb_info()
+        pose2pdb_mapping = dict()
         for point_mutation in design[len(scaffold) + 1:-4].split('_'):
-            pdb_index_chain = pose_info.pose2pdb(int(point_mutation[1:-1])).split(' ')
-            design_new_name += '_' + pdb_index_chain[0] + point_mutation[0] + pdb_index_chain[1] + point_mutation[-1]
+            pdb_index_chain = pdb_info.pose2pdb(int(point_mutation[1:-1])).split(' ')
+            point_mutation_pdb_index = pdb_index_chain[1] + point_mutation[0] + pdb_index_chain[0] + point_mutation[-1]
+            design_new_name += '_' + point_mutation_pdb_index
+            pose2pdb_mapping[point_mutation] = point_mutation_pdb_index
         score_sheet.write(row, 0, design_new_name)
         scores = extract_n_decoys(load_scores_from_fasc(directory + '/' + match + '/design'))
         for name, score in scores.items():
@@ -55,11 +58,12 @@ def write_score_table(directory, params_files):
         num_sheet.write(row, 1, number)
         # revert
         col = 2
-        for reverted_design in filter(lambda x: x.startswith('revert_'), os.listdir(directory + '/' + match)):
-            score_sheet.write(row, col, reverted_design)
-            num_sheet.write(row, col, reverted_design)
+        for reverted_point_mutation in filter(lambda x: x.startswith('revert_'), os.listdir(directory + '/' + match)):
+            reverted_point_mutation_pdb_index = pose2pdb_mapping[reverted_point_mutation[7:]]
+            score_sheet.write(row, col, reverted_point_mutation_pdb_index)
+            num_sheet.write(row, col, reverted_point_mutation_pdb_index)
             col += 1
-            scores = extract_n_decoys(load_scores_from_fasc(directory + '/' + match + '/' + reverted_design))
+            scores = extract_n_decoys(load_scores_from_fasc(directory + '/' + match + '/' + reverted_point_mutation))
             for name, score in scores.items():
                 number = int(name.split("_")[-1][:-4])
                 break
