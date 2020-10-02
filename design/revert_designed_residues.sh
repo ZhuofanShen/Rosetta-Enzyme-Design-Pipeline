@@ -45,33 +45,30 @@ fi
 #     memory="--mem ${memory}"
 # fi
 
-linker_res_name=$(ls ${linker}/*_ligand.params)
-linker_res_name=${linker_res_name##*/}
-linker_res_name=${linker_res_name%_ligand.params}
-
-params_files="-params"
-for params_file in `ls ${linker}/*.params`
-do
-    params_files=${params_files}" ../"${params_file}
-done
-
-IFS=','
-if ! [ -z "${ligand}" ]
-then
-    for params_file in ${ligand[@]}
-    do
-        params_files=${params_files}" ../"${params_file}
-    done
-fi
-IFS='
-'
-
 path_to_protein=${position_files%/*}
 scaffold=${position_files##*/}
 substrate=${linker##*/}
 
 if [ -z "${not_get_the_best_design}" ]
 then
+    linker_res_name=$(ls ${linker}/*_ligand.params)
+    linker_res_name=${linker_res_name##*/}
+    linker_res_name=${linker_res_name%_ligand.params}
+
+    params_files="-params"
+    for params_file in `ls ${linker}/*.params`
+    do
+        params_files=${params_files}" "${params_file}
+    done
+
+    IFS=','
+    if ! [ -z "${ligand}" ]
+    then
+        params_files=${params_files}${ligand[@]}
+    fi
+    IFS='
+    '
+
     protein=${scaffold%-*}
     reference_pdb=$(ls ${path_to_protein}/${protein}*.pdb)
 
@@ -80,9 +77,9 @@ then
         ignore_symmetric_mutations="-symm"
     fi
 
-    srun --job-name get_the_best_design --partition p_sdk94_1 --time 1:00:00 \
+    # srun --job-name get_the_best_design --partition p_sdk94_1 --time 1:00:00 \
         python ../scripts/get_the_best_design.py ${scaffold}_${substrate} -ref ${reference_pdb} \
-        ${params_files} -linker ${linker_res_name} ${ignore_symmetric_mutations}
+        -linker ${linker_res_name} ${params_files} ${ignore_symmetric_mutations}
 fi
 
 params_files="-params"
@@ -111,9 +108,9 @@ do
         cd ${variant}
         design=$(ls ${scaffold}_*.pdb)
         design=${design:0:-4}
-        point_mutations=${design##${scaffold}_}
+        point_mutations_str=${design##${scaffold}_}
         IFS='_'
-        point_mutations=(${point_mutations[@]})
+        point_mutations=(${point_mutations_str[@]})
         IFS='
         '
         for i in ${!point_mutations[@]}
@@ -129,23 +126,22 @@ do
             do
                 if [[ ${#point_mutations[@]} > 1 ]]
                 then
-                    point_mutations="-muts"
+                    point_mutations_argument="-muts"
                     for point_mutation in ${point_mutations[@]}
                     do
                         if [[ ${point_mutation} != ${reverted_point_mutation} ]]
                         then
-                            point_mutations=${point_mutations}" "${point_mutation:1:-1}","${point_mutation: -1}
+                            point_mutations_argument=${point_mutations_argument}" "${point_mutation:1:-1}","${point_mutation: -1}
                         fi
                     done
-                else
-                    point_mutations=""
                 fi
                 mkdir revert_${reverted_point_mutation}
                 cd revert_${reverted_point_mutation}
-                slurmit.py --job ${variant} --mem ${memory} --command "python ../../../../scripts/fast_design.py \
-                    ../${variant}.pdb -sf ref2015_cst ${params_files} ${symmetry} \
+                slurmit.py --job ${variant} --mem ${memory} --command \
+                    "python ../../../../scripts/fast_design.py ../${variant}.pdb \
+                    -sf ref2015_cst ${params_files} ${symmetry} \
                     -enzdescst ../../../${linker}/${substrate}${enzdes_cst_suffix} \
-                    ${point_mutations} ${neighborhood} -rmsd True ${decoys};"
+                    ${point_mutations_argument} ${neighborhood} -rmsd True ${decoys};"
                 sleep 0.05
                 cd ..
             done
