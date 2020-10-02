@@ -15,7 +15,7 @@ CPG2-AB (or CPG2-A)
 CPG2-AB_1 CPG2-AB_2 CPG2-AB_3
 > ls CPG2-A
 
-CPG2-A_1 CPG2-A_2 CPG2-A_3 CPG2-A_4 CPG2-A_5
+CPG2-A_1 CPG2-A_2 CPG2-A_3
 > cd ..
 
 **Match**
@@ -39,14 +39,17 @@ or make staples within chain A
 
 **Convert output CloudPDB files into FastDesign input files**
 
-Install Anaconda3 and PyMOL
-> conda config --set auto_activate_base false
+Install Anaconda3 in the /home/NetID/anaconda3 folder and then install the PyMOL module. If you have installed Anaconda3 on Amarel, skip this step.
+Go to https://repo.anaconda.com/archive/, select the newest Linux-x86_64 version and put it in the /home/NetID directory.
+> bash Anaconda3-2020.07-Linux-x86_64.sh
 
 > conda init
 
-> eval "$(~/anaconda3/bin/conda shell.bash hook)"
+> conda config --set auto_activate_base false
 
-Make sure that your Anaconda3 has the pymol module installed.
+> conda install -c schrodinger pymol
+
+Make sure that the Anaconda3 has initialized each time you login your Amarel account.
 > source ~/anaconda3/bin/activate
 
 Make staples across chain A and chain B
