@@ -59,9 +59,9 @@ def write_score_table(directory, params_files):
         # revert
         col = 2
         for reverted_point_mutation in filter(lambda x: x.startswith('revert_'), os.listdir(directory + '/' + match)):
+            num_sheet.write(row, col, reverted_point_mutation)
             reverted_point_mutation_pdb_index = pose2pdb_mapping[reverted_point_mutation[7:]]
             score_sheet.write(row, col, reverted_point_mutation_pdb_index)
-            num_sheet.write(row, col, reverted_point_mutation_pdb_index)
             col += 1
             scores = extract_n_decoys(load_scores_from_fasc(directory + '/' + match + '/' + reverted_point_mutation))
             for name, score in scores.items():
