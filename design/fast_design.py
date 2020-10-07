@@ -88,9 +88,7 @@ def create_fold_tree(edge_list):
 def create_score_fc(sfxn='ref2015', weights=None):
     score_function = create_score_function(sfxn)
     if sfxn.startswith('ref2015'):
-        score_function.set_weight(ScoreType.fa_intra_rep_nonprotein, 0.995)
-    elif sfxn.startswith('beta_nov16'):
-        score_function.set_weight(ScoreType.fa_intra_rep_nonprotein, 0.45)
+        score_function.set_weight(ScoreType.fa_intra_rep_nonprotein, 0.545)
     return score_function
 
 def get_match_substrate_pose_indexes(pdb):
