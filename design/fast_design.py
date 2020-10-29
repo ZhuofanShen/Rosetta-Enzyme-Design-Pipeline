@@ -22,8 +22,8 @@ from pyrosetta.rosetta.core.scoring.symmetry import SymmetricScoreFunction
 from pyrosetta.rosetta.core.scoring.constraints import *
 from pyrosetta.rosetta.core.select.residue_selector import \
     AndResidueSelector, NotResidueSelector, OrResidueSelector, \
-    ResidueIndexSelector, ResiduePropertySelector, \
-    NeighborhoodResidueSelector, InterGroupInterfaceByVectorSelector
+    ResidueIndexSelector, NeighborhoodResidueSelector, \
+    InterGroupInterfaceByVectorSelector
 from pyrosetta.rosetta.core.simple_metrics.metrics import \
     RMSDMetric
 from pyrosetta.rosetta.protocols.constraint_generator import \
