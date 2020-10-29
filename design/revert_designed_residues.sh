@@ -35,7 +35,7 @@ fi
 
 if [ -z "${decoys}" ]
 then
-    decoys="-decoys 50"
+    decoys="-decoys 3"
 else
     decoys="-decoys "${decoys}
 fi
