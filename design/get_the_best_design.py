@@ -12,7 +12,7 @@ def parse_arguments():
     parser.add_argument('-params', '--params_files', type=str, nargs='*', required=True, \
         help='including params files for both matching residues and protein ligands/cofactors.')
     parser.add_argument('-linker', '--linker_res_name', type=str)
-    parser.add_argument('-homo', '--homomeric', action='store_true')
+    parser.add_argument('-symm', '--symmetry', action='store_true')
     return parser.parse_args()
 
 def load_scores_from_fasc(variant):
@@ -96,8 +96,8 @@ if __name__ == "__main__":
     protein_name = args.directory[:args.directory.find('_')]
     # load initial reference sequence
     ref_pose = pose_from_pdb(args.reference_pdb)
-    initial_ref_seq, ref_annotation_dict = read_annotated_sequence(ref_pose.annotated_sequence(), args.homomeric)
+    initial_ref_seq, ref_annotation_dict = read_annotated_sequence(ref_pose.annotated_sequence(), args.symmetry)
     # insert the linker residue into the initial reference sequence and make comparison
     for variant in filter(lambda x: x.startswith('X'), os.listdir(args.directory)):
         # rename the best decoy of each variant
-        rename_best_decoy(args.directory + '/' + variant, initial_ref_seq, args.linker_res_name, args.homomeric, protein_name)
+        rename_best_decoy(args.directory + '/' + variant, initial_ref_seq, args.linker_res_name, args.symmetry, protein_name)
