@@ -18,10 +18,10 @@ or make staples within chain A
 
 **Generate a .xls file containing the scores of the designed variant and the variants in which one designed point mutation is reverted back to the wild type**
 Make staples across chain A and chain B
-> python ../scripts/generate_scores_table.py CPG2-AB_pAaF-product -params ../pAaF/pAaF-product/AAF_ligand.params ../pAaF/pAaF-product/CYX.params ../pAaF/pAaF-product/TYZ.params
+> python ../scripts/generate_scores_table.py CPG2-AB_pAaF-product -symm ../CPG2/CPG2_relaxed.symm -dup
 
 or make staples within chain A
-> python ../scripts/generate_scores_table.py CPG2-A_pAaF-product -params ../pAaF/pAaF-product/AAF_ligand.params ../pAaF/pAaF-product/CYX.params ../pAaF/pAaF-product/TYZ.params
+> python ../scripts/generate_scores_table.py CPG2-A_pAaF-product -symm ../CPG2/CPG2_relaxed.symm -dup
 
 **Download the output PDB files to your local directory**
 
