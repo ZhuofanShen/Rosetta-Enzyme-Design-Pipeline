@@ -1,20 +1,20 @@
 **Run FastDesign**
 
 Make staples across chain A and chain B
-> ../scripts/fast_design_matches.sh -pos ../CPG2/CPG2-AB -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -dup true -nbh 8.0 -n 50 -mem 2000
+> ../scripts/fast_design_matches.sh -pos ../CPG2/CPG2-AB -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -cst_suffix symm -nbh 8.0 -n 50 -mem 2000
 
 or make staples within chain A
-> ../scripts/fast_design_matches.sh -pos ../CPG2/CPG2-A -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -nbh 8.0 -n 50 -mem 2000
+> ../scripts/fast_design_matches.sh -pos ../CPG2/CPG2-A -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -cst_suffix design -nbh 8.0 -n 50 -mem 2000
 
 -nbh 8.0 is optional if your protein is samll.
 
 **Run FastRelax with designed point mutations reverted back to the wild type one by one**
 
 Make staples across chain A and chain B
-> ../scripts/revert_designed_residues.sh -pos ../CPG2/CPG2-AB -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -dup true -nbh 8.0 -n 50 -mem 2000
+> ../scripts/revert_designed_residues.sh -pos ../CPG2/CPG2-AB -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -cst_suffix symm -nbh 8.0 -n 50 -mem 2000
 
 or make staples within chain A
-> ../scripts/revert_designed_residues.sh -pos ../CPG2/CPG2-A -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -nbh 8.0 -n 50 -mem 2000
+> ../scripts/revert_designed_residues.sh -pos ../CPG2/CPG2-A -linker ../pAaF/pAaF-product -symm ../CPG2/CPG2_relaxed.symm -cst_suffix design -nbh 8.0 -n 50 -mem 2000
 
 **Generate a .xls file containing the scores of the designed variant and the variants in which one designed point mutation is reverted back to the wild type**
 Make staples across chain A and chain B
