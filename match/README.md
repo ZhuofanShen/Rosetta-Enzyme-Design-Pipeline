@@ -2,10 +2,10 @@
 > cd CPG2
 
 Make staples across chain A and chain B
-> python generate_position_files.py CPG2_relaxed.pdb -chains A B -wl 2000
+> python ../scripts/generate_position_files.py CPG2_relaxed.pdb -chains A B -wl 2000
 
 or make staples within chain A
-> python generate_position_files.py CPG2_relaxed.pdb -chain A -wl 2000
+> python ../scripts/generate_position_files.py CPG2_relaxed.pdb -chain A -wl 2000
 
 > ls
 
