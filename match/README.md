@@ -56,7 +56,7 @@ Make staples across chain A and chain B
 > ../scripts/generate_fast_design_input.sh -pos ../CPG2/CPG2-AB -dup true
 
 or make staples within chain A
-> ../scripts/generate_fast_design_input.sh -pos ../CPG2/CPG2-A
+> ../scripts/generate_fast_design_input.sh -pos ../CPG2/CPG2-A -sym true
 
 Unload Anaconda
 > conda deactivate
