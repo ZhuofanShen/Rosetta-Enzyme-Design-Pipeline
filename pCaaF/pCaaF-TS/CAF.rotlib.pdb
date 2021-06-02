@@ -1,66 +1,66 @@
 REMARK 99.22639465332031
-HETATM    1  N1  CAF     0      -0.174  -0.415   0.431  0.00  0.00           N  
-HETATM    2  H1  CAF     0       0.109  -1.377   0.569  0.00  0.00           H  
-HETATM    3  C1  CAF     0       0.841   0.508   0.445  0.00  0.00           C  
-HETATM    4  O1  CAF     0       0.680   1.716   0.242  0.00  0.00           O  
-HETATM    5  C2  CAF     0       2.178  -0.054   0.823  0.00  0.00           C  
-HETATM    6  H2  CAF     0       2.312  -1.118   0.949  0.00  0.00           H  
-HETATM    7  H3  CAF     0       3.032   0.524   0.516  0.00  0.00           H  
-HETATM    8 Cl1  CAF     0       2.286   0.504   2.894  0.00  0.00          Cl  
-HETATM    9  S1  CAF     0       2.378  -0.917  -1.759  0.00  0.00           X  
-ENDMDL
+HETATM    1  N1  CAF X   1      -0.174  -0.415   0.431  1.00  0.00           N  
+HETATM    2  H1  CAF X   1       0.109  -1.377   0.569  1.00  0.00           H  
+HETATM    3  C1  CAF X   1       0.841   0.508   0.445  1.00  0.00           C  
+HETATM    4  O1  CAF X   1       0.680   1.716   0.242  1.00  0.00           O  
+HETATM    5  C2  CAF X   1       2.178  -0.054   0.823  1.00  0.00           C  
+HETATM    6  H2  CAF X   1       2.312  -1.118   0.949  1.00  0.00           H  
+HETATM    7  H3  CAF X   1       3.032   0.524   0.516  1.00  0.00           H  
+HETATM    8 Cl1  CAF X   1       2.286   0.504   2.894  1.00  0.00          Cl  
+HETATM    9  S1  CAF X   1       2.378  -0.917  -1.759  1.00  0.00           X  
+TER
 REMARK 92.72639465332031
-HETATM    1  N1  CAF     0      -0.174  -0.415   0.431  0.00  0.00           N  
-HETATM    2  H1  CAF     0       0.109  -1.377   0.569  0.00  0.00           H  
-HETATM    3  C1  CAF     0       0.841   0.508   0.445  0.00  0.00           C  
-HETATM    4  O1  CAF     0       0.680   1.716   0.242  0.00  0.00           O  
-HETATM    5  C2  CAF     0       2.178  -0.054   0.823  0.00  0.00           C  
-HETATM    6  H2  CAF     0       2.339  -1.121   0.847  0.00  0.00           H  
-HETATM    7  H3  CAF     0       3.026   0.575   0.613  0.00  0.00           H  
-HETATM    8 Cl1  CAF     0       2.184   0.293   2.942  0.00  0.00          Cl  
-HETATM    9  S1  CAF     0       2.510  -0.645  -1.821  0.00  0.00           X  
-ENDMDL
+HETATM    1  N1  CAF X   1      -0.174  -0.415   0.431  1.00  0.00           N  
+HETATM    2  H1  CAF X   1       0.109  -1.377   0.569  1.00  0.00           H  
+HETATM    3  C1  CAF X   1       0.841   0.508   0.445  1.00  0.00           C  
+HETATM    4  O1  CAF X   1       0.680   1.716   0.242  1.00  0.00           O  
+HETATM    5  C2  CAF X   1       2.178  -0.054   0.823  1.00  0.00           C  
+HETATM    6  H2  CAF X   1       2.339  -1.121   0.847  1.00  0.00           H  
+HETATM    7  H3  CAF X   1       3.026   0.575   0.613  1.00  0.00           H  
+HETATM    8 Cl1  CAF X   1       2.184   0.293   2.942  1.00  0.00          Cl  
+HETATM    9  S1  CAF X   1       2.510  -0.645  -1.821  1.00  0.00           X  
+TER
 REMARK 86.22639465332031
-HETATM    1  N1  CAF     0      -0.174  -0.415   0.431  0.00  0.00           N  
-HETATM    2  H1  CAF     0       0.109  -1.377   0.569  0.00  0.00           H  
-HETATM    3  C1  CAF     0       0.841   0.508   0.445  0.00  0.00           C  
-HETATM    4  O1  CAF     0       0.680   1.716   0.242  0.00  0.00           O  
-HETATM    5  C2  CAF     0       2.178  -0.054   0.823  0.00  0.00           C  
-HETATM    6  H2  CAF     0       2.371  -1.113   0.747  0.00  0.00           H  
-HETATM    7  H3  CAF     0       3.014   0.615   0.715  0.00  0.00           H  
-HETATM    8 Cl1  CAF     0       2.086   0.076   2.964  0.00  0.00          Cl  
-HETATM    9  S1  CAF     0       2.636  -0.364  -1.850  0.00  0.00           X  
-ENDMDL
+HETATM    1  N1  CAF X   1      -0.174  -0.415   0.431  1.00  0.00           N  
+HETATM    2  H1  CAF X   1       0.109  -1.377   0.569  1.00  0.00           H  
+HETATM    3  C1  CAF X   1       0.841   0.508   0.445  1.00  0.00           C  
+HETATM    4  O1  CAF X   1       0.680   1.716   0.242  1.00  0.00           O  
+HETATM    5  C2  CAF X   1       2.178  -0.054   0.823  1.00  0.00           C  
+HETATM    6  H2  CAF X   1       2.371  -1.113   0.747  1.00  0.00           H  
+HETATM    7  H3  CAF X   1       3.014   0.615   0.715  1.00  0.00           H  
+HETATM    8 Cl1  CAF X   1       2.086   0.076   2.964  1.00  0.00          Cl  
+HETATM    9  S1  CAF X   1       2.636  -0.364  -1.850  1.00  0.00           X  
+TER
 REMARK 80.77360534667969
-HETATM    1  N1  CAF     0      -0.174  -0.415   0.431  0.00  0.00           N  
-HETATM    2  H1  CAF     0       0.109  -1.377   0.569  0.00  0.00           H  
-HETATM    3  C1  CAF     0       0.841   0.508   0.445  0.00  0.00           C  
-HETATM    4  O1  CAF     0       0.680   1.716   0.242  0.00  0.00           O  
-HETATM    5  C2  CAF     0       2.178  -0.054   0.823  0.00  0.00           C  
-HETATM    6  H2  CAF     0       3.025   0.597   0.975  0.00  0.00           H  
-HETATM    7  H3  CAF     0       2.158  -0.983   1.366  0.00  0.00           H  
-HETATM    8 Cl1  CAF     0       2.801  -0.919  -1.041  0.00  0.00          Cl  
-HETATM    9  S1  CAF     0       1.712   0.921   3.329  0.00  0.00           X  
-ENDMDL
+HETATM    1  N1  CAF X   1      -0.174  -0.415   0.431  1.00  0.00           N  
+HETATM    2  H1  CAF X   1       0.109  -1.377   0.569  1.00  0.00           H  
+HETATM    3  C1  CAF X   1       0.841   0.508   0.445  1.00  0.00           C  
+HETATM    4  O1  CAF X   1       0.680   1.716   0.242  1.00  0.00           O  
+HETATM    5  C2  CAF X   1       2.178  -0.054   0.823  1.00  0.00           C  
+HETATM    6  H2  CAF X   1       3.025   0.597   0.975  1.00  0.00           H  
+HETATM    7  H3  CAF X   1       2.158  -0.983   1.366  1.00  0.00           H  
+HETATM    8 Cl1  CAF X   1       2.801  -0.919  -1.041  1.00  0.00          Cl  
+HETATM    9  S1  CAF X   1       1.712   0.921   3.329  1.00  0.00           X  
+TER
 REMARK 87.27360534667969
-HETATM    1  N1  CAF     0      -0.174  -0.415   0.431  0.00  0.00           N  
-HETATM    2  H1  CAF     0       0.109  -1.377   0.569  0.00  0.00           H  
-HETATM    3  C1  CAF     0       0.841   0.508   0.445  0.00  0.00           C  
-HETATM    4  O1  CAF     0       0.680   1.716   0.242  0.00  0.00           O  
-HETATM    5  C2  CAF     0       2.178  -0.054   0.823  0.00  0.00           C  
-HETATM    6  H2  CAF     0       2.998   0.601   1.076  0.00  0.00           H  
-HETATM    7  H3  CAF     0       2.164  -1.034   1.269  0.00  0.00           H  
-HETATM    8 Cl1  CAF     0       2.903  -0.708  -1.089  0.00  0.00          Cl  
-HETATM    9  S1  CAF     0       1.580   0.649   3.392  0.00  0.00           X  
-ENDMDL
+HETATM    1  N1  CAF X   1      -0.174  -0.415   0.431  1.00  0.00           N  
+HETATM    2  H1  CAF X   1       0.109  -1.377   0.569  1.00  0.00           H  
+HETATM    3  C1  CAF X   1       0.841   0.508   0.445  1.00  0.00           C  
+HETATM    4  O1  CAF X   1       0.680   1.716   0.242  1.00  0.00           O  
+HETATM    5  C2  CAF X   1       2.178  -0.054   0.823  1.00  0.00           C  
+HETATM    6  H2  CAF X   1       2.998   0.601   1.076  1.00  0.00           H  
+HETATM    7  H3  CAF X   1       2.164  -1.034   1.269  1.00  0.00           H  
+HETATM    8 Cl1  CAF X   1       2.903  -0.708  -1.089  1.00  0.00          Cl  
+HETATM    9  S1  CAF X   1       1.580   0.649   3.392  1.00  0.00           X  
+TER
 REMARK 266.2263946533203
-HETATM    1  N1  CAF     0      -0.174  -0.415   0.431  0.00  0.00           N  
-HETATM    2  H1  CAF     0       0.109  -1.377   0.569  0.00  0.00           H  
-HETATM    3  C1  CAF     0       0.841   0.508   0.445  0.00  0.00           C  
-HETATM    4  O1  CAF     0       0.680   1.716   0.242  0.00  0.00           O  
-HETATM    5  C2  CAF     0       2.178  -0.054   0.823  0.00  0.00           C  
-HETATM    6  H2  CAF     0       2.966   0.593   1.176  0.00  0.00           H  
-HETATM    7  H3  CAF     0       2.176  -1.074   1.167  0.00  0.00           H  
-HETATM    8 Cl1  CAF     0       3.000  -0.491  -1.112  0.00  0.00          Cl  
-HETATM    9  S1  CAF     0       1.454   0.368   3.421  0.00  0.00           X  
-ENDMDL
+HETATM    1  N1  CAF X   1      -0.174  -0.415   0.431  1.00  0.00           N  
+HETATM    2  H1  CAF X   1       0.109  -1.377   0.569  1.00  0.00           H  
+HETATM    3  C1  CAF X   1       0.841   0.508   0.445  1.00  0.00           C  
+HETATM    4  O1  CAF X   1       0.680   1.716   0.242  1.00  0.00           O  
+HETATM    5  C2  CAF X   1       2.178  -0.054   0.823  1.00  0.00           C  
+HETATM    6  H2  CAF X   1       2.966   0.593   1.176  1.00  0.00           H  
+HETATM    7  H3  CAF X   1       2.176  -1.074   1.167  1.00  0.00           H  
+HETATM    8 Cl1  CAF X   1       3.000  -0.491  -1.112  1.00  0.00          Cl  
+HETATM    9  S1  CAF X   1       1.454   0.368   3.421  1.00  0.00           X  
+TER
