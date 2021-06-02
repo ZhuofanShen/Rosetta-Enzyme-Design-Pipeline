@@ -5,7 +5,6 @@ do
         -pos) position_files="$2";; # i.e. ../CPG2/CPG2-AB
         -linker) linker="$2";; # i.e. ../pAaF/pAaF-product
         -mem) memory="$2";;
-        -ligand) ligand="$2";; # Optional, only for ligands or cofactors of the protein, not for matching residues or ligands.
         *) break;
     esac
     shift 2
@@ -16,24 +15,21 @@ done
 #   memory="--mem ${memory}"
 # fi
 
+path_to_protein=${position_files%/*}
 IFS=','
-if ! [ -z "${ligand}" ]
+params_files="-extra_res_fa "$(ls ${path_to_protein}/*.params)
+if [[ ${params_files} == "-extra_res_fa " ]]
 then
     params_files=""
-    for params_file in ${ligand[@]}
-    do
-        params_files=${ligand}" ../../../"${params_file}
-    done
 fi
 IFS='
 '
 
-path_to_protein=${position_files%/*}
 scaffold=${position_files##*/}
 protein=${scaffold%-*}
+substrate=${linker##*/}
 reference_pdb=$(ls ${path_to_protein}/${protein}*.pdb)
 
-substrate=${linker##*/}
 mkdir ${scaffold}_${substrate}
 cd ${scaffold}_${substrate}
 
@@ -43,7 +39,7 @@ do
     scaffold_part=${scaffold_part%.pos}
     mkdir ${scaffold_part}
     cd ${scaffold_part}
-    slurmit.py --job ${scaffold_part} --mem ${memory} --command "~/Rosetta/main/source/bin/match.linuxgccrelease \
+    slurmit.py --job ${scaffold_part} --mem ${memory} --command "~/Rosetta/main/source/bin/match.default.linuxgccrelease \
         @../../../scripts/general_match.flags @../../${linker}/subs.flags ${params_files} \
         -match:scaffold_active_site_residues_for_geomcsts ../${pos} -s ../../${reference_pdb}"
     cd ..
