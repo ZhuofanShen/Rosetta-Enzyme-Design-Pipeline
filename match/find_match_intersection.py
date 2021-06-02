@@ -37,7 +37,7 @@ def intersection(state_match_dict):
     for state in state_match_dict.keys():
         for match in os.listdir(state):
             if match.startswith('X') and match not in match_intersection:
-                shutil.rmtree(state + '/' + match)
+                os.rename(state + '/' + match, state + '/' + match + '_deprecated')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
