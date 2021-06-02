@@ -1,22 +1,15 @@
 #!/usr/bin/python3
-'''
-score function
-symmetry
-coord cst
-task factory
-    read tyz cyx from remark lines
-move map
-'''
 import argparse
 import os
 from pyrosetta import *
 from pyrosetta.rosetta.core.chemical import ResidueProperty
+from pyrosetta.rosetta.core.pack.palette import CustomBaseTypePackerPalette
 from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.pack.task.operation import \
     InitializeFromCommandline, IncludeCurrent, ExtraRotamers, \
     OperateOnResidueSubset, RestrictToRepackingRLT, \
     RestrictAbsentCanonicalAASRLT, PreventRepackingRLT, \
-    RestrictToRepacking
+    RestrictToRepacking, PreventRepacking
 from pyrosetta.rosetta.core.scoring import ScoreType
 from pyrosetta.rosetta.core.scoring.symmetry import SymmetricScoreFunction
 from pyrosetta.rosetta.core.scoring.constraints import *
@@ -40,83 +33,90 @@ from pyrosetta.rosetta.protocols.symmetry import SetupForSymmetryMover
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('pdb', type=str)
-    parser.add_argument('-params', type=str, nargs='*')
+    parser.add_argument('-ref', '--reference_pose', type=str)
+    parser.add_argument('-params', '--parameters_files', type=str, nargs='*')
     parser.add_argument('-ft', '--fold_tree', type=str, nargs='*')
-    parser.add_argument('-chis', type=str, nargs='*')
-    parser.add_argument('-sf', '--score_function', type=str)
+    parser.add_argument('-chis', '--chi_dihedrals', type=str, nargs='*', default=list())
+    parser.add_argument('-sf', '--score_function', type=str, default='ref2015_cst')
+    parser.add_argument('--score_terms', type=str, nargs='*', default=list())
     parser.add_argument('-symm', '--symmetry', type=str)
-    # parser.add_argument('-dup', '--duplicated_chains', type=str, nargs='*')
-    parser.add_argument('-enzdescst', type=str)
-    parser.add_argument('-cst', type=str)
-    parser.add_argument('-nbh', type=float)
-    parser.add_argument('-nataa', type=bool)
-    parser.add_argument('--enzdes', action='store_true')
-    parser.add_argument('-muts', type=str, nargs='*')
-    parser.add_argument('-des', type=str, nargs='*')
-    parser.add_argument('-decoys', type=int)
-    parser.add_argument('-rmsd', type=str)
+    # parser.add_argument('-dup', '--duplicated', action='store_true')
+    # if args.symm and len(chains) > 1: args.duplicated = True
+    parser.add_argument('-cst', '--constraints', type=str)
+    parser.add_argument('-enzdes_cst', '--enzyme_design_constraints', type=str)
+    parser.add_argument('-nbh', '--neighborhood', type=float, default=0)
+    parser.add_argument('-muts', type=int, nargs='*', default=list())
+    parser.add_argument('-nataa', type=float)
+    parser.add_argument('-no_cys', '--cystine', action='store_false')
+    parser.add_argument('-ncaa', type=str, nargs='*', default=list(), help='name3')
+    parser.add_argument('-des', type=int, nargs='*')
+    parser.add_argument('-subs', '--substrate', type=int, nargs='*')
+    parser.add_argument('-enzdes', '--enzyme_design', action='store_true')
+    parser.add_argument('-n', '--decoys', type=int, default=50)
+    parser.add_argument('-rmsd', type=int, nargs='*', default=list())
+    parser.add_argument('--annotated_name', action='store_true')
+    parser.add_argument('-debug', '--debug_mode', action='store_true')
     args = parser.parse_args()
     return args
 
 def init_pyrosetta_with_opts(args):
-    opts = '-ex1 -ex2 -ignore_zero_occupancy false \
-        -use_input_sc' # -nblist_autoupdate
+    opts = '-ex1 -ex2 -ignore_zero_occupancy false -use_input_sc -no_optH false -flip_HNQ'# -nblist_autoupdate
     if args.score_function.startswith('beta_nov16'):
         opts += ' -corrections::beta_nov16'
-    if args.params:
-        opts += " -extra_res_fa"
-        for params_file in args.params:
-            opts = opts + ' ' + params_file
-    if args.enzdescst:
-        opts += ' -enzdes:cstfile {} -run:preserve_header'.format(args.enzdescst)
-    if args.cst:
-        opts += ' -constraints:cst_fa_file {}'.format(args.cst)
+    if args.parameters_files:
+        opts += " -extra_res_fa " + ' '.join(args.parameters_files)
+    if args.enzyme_design_constraints:
+        opts += ' -enzdes:cstfile {} -run:preserve_header'.format(args.enzyme_design_constraints)
+    if args.constraints:
+        opts += ' -constraints:cst_fa_file {}'.format(args.constraints)
     init(opts)
 
 def create_fold_tree(edge_list):
     fold_tree = FoldTree()
     for edge_str in edge_list:
         edge_num = edge_str.split(',')
-        if len(edge_num) is 3:
+        if len(edge_num) == 3:
             fold_tree.add_edge(int(edge_num[0]), int(edge_num[1]), int(edge_num[2]))
-        elif len(edge_num) is 4:
+        elif len(edge_num) == 4:
             fold_tree.add_edge(int(edge_num[0]), int(edge_num[1]), edge_num[2], edge_num[3])
         else:
             raise Exception("The number of arguments in add_edge function should be 3 or 4")
     return fold_tree
 
-def create_score_fc(sfxn='ref2015', weights=None):
-    score_function = create_score_function(sfxn)
-    if sfxn.startswith('ref2015'):
-        score_function.set_weight(ScoreType.fa_intra_rep_nonprotein, 0.545)
-    return score_function
-
-def get_match_substrate_pose_indexes(pdb):
+def get_match_pose_indexes(info, pdb, symmetry):
     match_substrate_pose_indexes = set()
-    info = pose.pdb_info()
+    match_res_pose_indexes = set()
     flag = False
+    main_chain = None
     with open(pdb, 'r') as pdb:
         for line in pdb:
             if line.startswith('REMARK 666 MATCH TEMPLATE'):
-                ligand_chain_id = line[26]
-                ligand_res_id = int(line[32:36])
-                ligand_pose_id = info.pdb2pose(ligand_chain_id, ligand_res_id)
-                match_substrate_pose_indexes.add(ligand_pose_id)
-                # if duplicated_chains:
-                #     for duplicated_chain in filter(lambda x: x != ligand_chain_id, duplicated_chains):
-                #         ligand_pose_id = info.pdb2pose(duplicated_chain, ligand_res_id)
-                #         match_substrate_pose_indexes.add(ligand_pose_id)
+                # substrate
+                substrate_chain_id = line[26]
+                if not main_chain:
+                    main_chain = substrate_chain_id
+                if main_chain == substrate_chain_id or not symmetry:
+                    substrate_res_id = int(line[32:36])
+                    substrate_pose_id = info.pdb2pose(substrate_chain_id, substrate_res_id)
+                    match_substrate_pose_indexes.add(substrate_pose_id)
+                # match residues
+                motif_chain_id = line[49]
+                if main_chain == motif_chain_id or not symmetry:
+                    motif_res_id = int(line[55:59])
+                    motif_pose_id = info.pdb2pose(motif_chain_id, motif_res_id)
+                    match_res_pose_indexes.add(motif_pose_id)
                 flag = True
             elif flag == True:
                 break
-    return match_substrate_pose_indexes
+    return match_substrate_pose_indexes, match_res_pose_indexes
 
-def create_coord_cst(pose, ligand_res_indexes):
+def create_coord_cst(ref_pose=None, free_res_indexes=None):
     coord_cst_gen = CoordinateConstraintGenerator()
-    if ligand_res_indexes:
-        ligand_res_index_str = ','.join(str(ligand_res_index) for ligand_res_index in ligand_res_indexes)
-        ligand_selector = ResidueIndexSelector(ligand_res_index_str)
-        coord_cst_gen.set_residue_selector(NotResidueSelector(ligand_selector))
+    if ref_pose:
+        coord_cst_gen.set_reference_pose(ref_pose)
+    if free_res_indexes:
+        free_res_selector = ResidueIndexSelector(','.join(str(free_res_index) for free_res_index in free_res_indexes))
+        coord_cst_gen.set_residue_selector(NotResidueSelector(free_res_selector))
     return coord_cst_gen
 
 def create_enzdes_cst():
@@ -125,10 +125,13 @@ def create_enzdes_cst():
     enz_cst.set_cst_action(ADD_NEW)
     return enz_cst
 
-def create_relax_task_factory(point_mutations, nbh=None):
+def create_relax_task_factory(point_mutations: list = list(), enzyme_core_indexes: list = list(), neighborhood: float = 0):
     task_factory = TaskFactory()
     task_factory.push_back(IncludeCurrent())
-    if point_mutations and point_mutations[0] != 'None':
+    repack = RestrictToRepackingRLT()
+    prevent = PreventRepackingRLT()
+    if len(point_mutations) > 0:
+        # Mutate
         mutated_selector = OrResidueSelector()
         for point_mutation in point_mutations:
             mutation_info = point_mutation.split(',')
@@ -137,136 +140,182 @@ def create_relax_task_factory(point_mutations, nbh=None):
             point_mutation_selector = ResidueIndexSelector(mutation_info[0])
             task_factory.push_back(OperateOnResidueSubset(restriction, point_mutation_selector))
             mutated_selector.add_residue_selector(point_mutation_selector)
-        if nbh:
-            repacking_selector = NeighborhoodResidueSelector()
-            repacking_selector.set_focus_selector(mutated_selector)
-            repacking_selector.set_distance(args.nbh)
-            repacking_selector.set_include_focus_in_subset(False)
-            repacking = RestrictToRepackingRLT()
-            task_factory.push_back(OperateOnResidueSubset(repacking, repacking_selector))
-            mutated_and_repacking_selector = OrResidueSelector(mutated_selector, repacking_selector)
-            prevent = PreventRepackingRLT()
-            task_factory.push_back(OperateOnResidueSubset(prevent, mutated_and_repacking_selector, True))
+        # Repack and static
+        if neighborhood > 0:
+            if len(enzyme_core_indexes) > 0:
+                # Repack
+                enzyme_core_selector = ResidueIndexSelector(','.join(str(enzyme_core_index) for enzyme_core_index in enzyme_core_indexes))
+                designable_repacking_selector = NeighborhoodResidueSelector()
+                designable_repacking_selector.set_focus_selector(OrResidueSelector(mutated_selector, enzyme_core_selector))
+                designable_repacking_selector.set_distance(neighborhood)
+                designable_repacking_selector.set_include_focus_in_subset(True)
+                repacking_selector = AndResidueSelector(designable_repacking_selector, NotResidueSelector(mutated_selector))
+                task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
+                # Static
+                task_factory.push_back(OperateOnResidueSubset(prevent, designable_repacking_selector, True))
+            else:
+                # Repack
+                repacking_selector = NeighborhoodResidueSelector()
+                repacking_selector.set_focus_selector(mutated_selector)
+                repacking_selector.set_distance(args.neighborhood)
+                repacking_selector.set_include_focus_in_subset(False)
+                task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
+                # Static
+                mutated_and_repacking_selector = OrResidueSelector(mutated_selector, repacking_selector)
+                task_factory.push_back(OperateOnResidueSubset(prevent, mutated_and_repacking_selector, True))
         else:
-            repacking = RestrictToRepackingRLT()
-            task_factory.push_back(OperateOnResidueSubset(repacking, mutated_selector, True))
+            # Repack
+            task_factory.push_back(OperateOnResidueSubset(repack, mutated_selector, True))
     else:
-        task_factory.push_back(RestrictToRepacking())
+        if neighborhood > 0:
+            if len(enzyme_core_indexes) > 0:
+                # Repack
+                enzyme_core_selector = ResidueIndexSelector(','.join(str(enzyme_core_index) for enzyme_core_index in enzyme_core_indexes))
+                repacking_selector = NeighborhoodResidueSelector()
+                repacking_selector.set_focus_selector(enzyme_core_selector)
+                repacking_selector.set_distance(neighborhood)
+                repacking_selector.set_include_focus_in_subset(True)
+                task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
+                # Static
+                task_factory.push_back(OperateOnResidueSubset(prevent, repacking_selector, True))
+            else:
+                # Static
+                task_factory.push_back(PreventRepacking())
+        else:
+            # Repack
+            task_factory.push_back(RestrictToRepacking())
     return task_factory
 
-def create_enzdes_task_factory(pdb, pose, nbh=None):
+def create_design_task_factory(mutatable_res_indexes: list, enzdes_cst_indexes: list = list(), \
+        neighborhood: float = 0, cystine: bool = True, ncaas: list = list()):
+    task_factory = TaskFactory()
+    if len(ncaas) > 0:
+        ncaa_palette = CustomBaseTypePackerPalette()
+        for ncaa in ncaas:
+            ncaa_palette.add_type(ncaa)
+        task_factory.set_packer_palette(ncaa_palette)
+    task_factory.push_back(IncludeCurrent())
     # Mutatable
-    info = pose.pdb_info()
-    matching_res_indexes = set()
-    flag = False
-    with open(pdb, 'r') as pdb:
-        for line in pdb:
-            if line.startswith('REMARK 666 MATCH TEMPLATE'):
-                # the linker is repackable
-                # ligand_chain_id = line[26]
-                ligand_res_id = int(line[32:36])
-                ligand_pose_id = info.pdb2pose('A', ligand_res_id)
-                matching_res_indexes.add(ligand_pose_id)
-                # matching residues are repackable
-                # motif_chain_id = line[49]
-                motif_res_id = int(line[55:59])
-                motif_pose_id = info.pdb2pose('A', motif_res_id)
-                matching_res_indexes.add(motif_pose_id)
-                flag = True
-            elif flag == True:
-                break
-    matching_res_indexes_str = ','.join(str(idx) for idx in matching_res_indexes)
-    matching_res_selector = ResidueIndexSelector(matching_res_indexes_str)
+    designable_selector = ResidueIndexSelector(','.join(str(mutatable_res_index) for mutatable_res_index in mutatable_res_indexes))
+    if not cystine:
+        restriction = RestrictAbsentCanonicalAASRLT()
+        restriction.aas_to_keep('AGILPVFWYDERHKSTMNQ') # AGILPVFWYDERHKSTCMNQ
+        task_factory.push_back(OperateOnResidueSubset(restriction, designable_selector))
+    # Repack
+    repack = RestrictToRepackingRLT()
+    prevent = PreventRepackingRLT()
+    if neighborhood > 0:
+        if len(enzdes_cst_indexes) > 0:
+            enzdes_cst_selector = ResidueIndexSelector(','.join(str(enzdes_cst_index) for enzdes_cst_index in enzdes_cst_indexes))
+            designable_repacking_selector = NeighborhoodResidueSelector()
+            designable_repacking_selector.set_focus_selector(OrResidueSelector(designable_selector, enzdes_cst_selector))
+            designable_repacking_selector.set_distance(neighborhood)
+            designable_repacking_selector.set_include_focus_in_subset(True)
+            repacking_selector = AndResidueSelector(designable_repacking_selector, NotResidueSelector(designable_selector))
+            task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
+            task_factory.push_back(OperateOnResidueSubset(prevent, designable_repacking_selector, True))
+        else:
+            repacking_selector = NeighborhoodResidueSelector()
+            repacking_selector.set_focus_selector(designable_selector)
+            repacking_selector.set_distance(neighborhood)
+            repacking_selector.set_include_focus_in_subset(False)
+            task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
+            task_factory.push_back(OperateOnResidueSubset(prevent, \
+                OrResidueSelector(designable_selector, repacking_selector), True))
+    else:
+        task_factory.push_back(OperateOnResidueSubset(repack, designable_selector, True))
+    return task_factory
+
+def create_enzyme_design_task_factory(enzyme_core_indexes: list, neighborhood: float = 0, cystine: bool = True, ncaas: list = list()):
+    task_factory = TaskFactory()
+    if len(ncaas) > 0:
+        ncaa_palette = CustomBaseTypePackerPalette()
+        for ncaa in ncaas:
+            ncaa_palette.add_type(ncaa)
+        task_factory.set_packer_palette(ncaa_palette)
+    task_factory.push_back(IncludeCurrent())
+    # Mutatable
+    enzyme_core_selector = ResidueIndexSelector(','.join(str(enzyme_core_index) for enzyme_core_index in enzyme_core_indexes))
     interface_selector = InterGroupInterfaceByVectorSelector()
-    interface_selector.group1_selector(matching_res_selector)
-    interface_selector.group2_selector(NotResidueSelector(matching_res_selector))
-    mutatable_selector = AndResidueSelector(interface_selector, NotResidueSelector(matching_res_selector))
-    # Repacking
-    if nbh:
-        repacking_selector = NeighborhoodResidueSelector()
-        repacking_selector.set_focus_selector(mutatable_selector)
-        repacking_selector.set_distance(nbh)
-        repacking_selector.set_include_focus_in_subset(False)
-    # Task Factory
-    task_factory = TaskFactory()
-    task_factory.push_back(IncludeCurrent())
-    restriction = RestrictAbsentCanonicalAASRLT()
-    restriction.aas_to_keep('GASTVLIMPFYWDEHQNKR') # No cystine
-    task_factory.push_back(OperateOnResidueSubset(restriction, mutatable_selector))
+    interface_selector.group1_selector(enzyme_core_selector)
+    interface_selector.group2_selector(NotResidueSelector(enzyme_core_selector))
+    designable_selector = AndResidueSelector(interface_selector, NotResidueSelector(enzyme_core_selector))
+    if not cystine:
+        restriction = RestrictAbsentCanonicalAASRLT()
+        restriction.aas_to_keep('AGILPVFWYDERHKSTMNQ') # AGILPVFWYDERHKSTCMNQ
+        task_factory.push_back(OperateOnResidueSubset(restriction, designable_selector))
+    # Repack
     repack = RestrictToRepackingRLT()
-    if nbh:
+    if neighborhood > 0:
+        repacking_wo_enzyme_core_selector = NeighborhoodResidueSelector()
+        repacking_wo_enzyme_core_selector.set_focus_selector(interface_selector)
+        repacking_wo_enzyme_core_selector.set_distance(neighborhood)
+        repacking_wo_enzyme_core_selector.set_include_focus_in_subset(False)
+        repacking_selector = OrResidueSelector(repacking_wo_enzyme_core_selector, enzyme_core_selector)
         task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
         prevent = PreventRepackingRLT()
-        task_factory.push_back(OperateOnResidueSubset(prevent, \
-            OrResidueSelector(mutatable_selector, repacking_selector), True))
+        task_factory.push_back(OperateOnResidueSubset(prevent, OrResidueSelector(designable_selector, repacking_selector), True))
     else:
-        task_factory.push_back(OperateOnResidueSubset(repack, mutatable_selector, True))
+        task_factory.push_back(OperateOnResidueSubset(repack, designable_selector, True))
     return task_factory
 
-def create_design_task_factory(mutatable_res_indexes, nbh=None):
-    task_factory = TaskFactory()
-    task_factory.push_back(IncludeCurrent())
-    mutatable_res_idx_str = ','.join(mutatable_res_indexes)
-    mutatable_selector = ResidueIndexSelector(mutatable_res_idx_str)
-    restriction = RestrictAbsentCanonicalAASRLT()
-    restriction.aas_to_keep('GASTVLIMPFYWDEHQNKR') # no cystine
-    task_factory.push_back(OperateOnResidueSubset(restriction, mutatable_selector))
-    repack = RestrictToRepackingRLT()
-    if nbh:
-        repacking_selector = NeighborhoodResidueSelector()
-        repacking_selector.set_focus_selector(mutatable_selector)
-        repacking_selector.set_distance(nbh)
-        repacking_selector.set_include_focus_in_subset(False)
-        task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
-        prevent = PreventRepackingRLT()
-        task_factory.push_back(OperateOnResidueSubset(prevent, \
-            OrResidueSelector(mutatable_selector, repacking_selector), True))
-    else:
-        task_factory.push_back(OperateOnResidueSubset(repack, mutatable_selector, True))
-    return task_factory
-
-def create_move_map(pose, ligand_res_indexes):
+def create_move_map(pose, ligand_res_indexes: list = list()):
     mm = MoveMap()
     mm.set_bb(True)
     mm.set_chi(True)
-    if ligand_res_indexes:
+    if len(ligand_res_indexes) > 0:
         for ligand_pose_id in ligand_res_indexes:
             edge = pose.fold_tree().get_residue_edge(ligand_pose_id)
             if not edge.is_jump():
-                raise Exception('Edge of the linker is not a jump edge.')
+                raise Exception('Edge of the ligand is not a jump edge.')
             mm.set_jump(edge.label(), True)
     return mm
 
-def create_fast_relax_mover(score_function, task_factory, move_map):
+def create_fast_relax_mover(score_function, task_factory, move_map=None):
     # Make FastRelax mover
     fast_relax = FastRelax()
     fast_relax.set_scorefxn(score_function)
     fast_relax.set_task_factory(task_factory)
-    fast_relax.set_movemap(move_map)
+    if move_map:
+        fast_relax.set_movemap(move_map)
     return fast_relax
 
-def run_job_distributor(pose, name, decoys, sfxn, *movers):
+def run_job_distributor(pose, sfxn, decoys, name, annotated_name, *movers):
     if decoys:
         job_distributor = PyJobDistributor(name, decoys, sfxn)
     else:
         job_distributor = PyJobDistributor(name, 5, sfxn)
+    pdb_name = job_distributor.pdb_name
     while not job_distributor.job_complete:
+        current_id = job_distributor.current_id
         pose_copy = Pose(pose)
         for mover in movers:
             mover.apply(pose_copy)
         job_distributor.output_decoy(pose_copy)
+        if annotated_name:
+            mutations_str = str()
+            for index, wt_res in pose.sequence():
+                res = pose_copy.sequence()[index]
+                if res != wt_res:
+                    mutations_str += '_' + wt_res + str(index) + res
+            os.rename(pdb_name + '_' + str(current_id) + '.pdb', pdb_name + '_' + str(current_id) + mutations_str + '.pdb')
 
 if __name__ == "__main__":
     args = parse_arguments()
     init_pyrosetta_with_opts(args)
     pose = pose_from_pdb(args.pdb)
+    if args.reference_pose:
+        ref_pose = pose_from_pdb(args.reference_pose)
     if args.fold_tree:
         fold_tree = create_fold_tree(args.fold_tree)
         pose.fold_tree(fold_tree)
-    if args.chis:
-        for chi in args.chis:
-            chi_info = chi.split(',')
-            pose.set_chi(int(chi_info[0]), int(chi_info[1]), float(chi_info[2]))
+        if args.reference_pose:
+            ref_pose.fold_tree(fold_tree)
+    for chi in args.chi_dihedrals:
+        chi_info = chi.split(',')
+        pose.set_chi(int(chi_info[0]), int(chi_info[1]), float(chi_info[2]))
+        if args.reference_pose:
+            ref_pose.set_chi(int(chi_info[0]), int(chi_info[1]), float(chi_info[2]))
     # Applying symmetry if specified
     if args.symmetry:
         sfxn = SymmetricScoreFunction()
@@ -274,44 +323,74 @@ if __name__ == "__main__":
         sfsm = SetupForSymmetryMover(args.symmetry)
         sfsm.set_keep_pdb_info_labels(True)
         sfsm.apply(pose)
+        if args.reference_pose:
+            sfsm.apply(ref_pose)
     else:
-        sfxn = create_score_fc(args.score_function)
+        sfxn = create_score_function(args.score_function)
+    # Add score terms
+    for score_term in args.score_terms:
+        term_weight = score_term.split(':')
+        exec("sfxn.set_weight(ScoreType.{}, {})".format(term_weight[0], term_weight[1]))
     # get pose index of the linkers
-    if args.enzdes:
-        match_substrate_pose_indexes = get_match_substrate_pose_indexes(args.pdb)
+    if args.enzyme_design_constraints:
+        pdb_info = pose.pdb_info()
+        # match_substrate_pose_indexes_chainA = get_match_substrate_pose_indexes(pdb_info, args.pdb)
+        match_substrate_pose_indexes, match_res_pose_indexes = get_match_pose_indexes(pdb_info, args.pdb, args.symmetry)
+        match_indexes_int = match_substrate_pose_indexes.union(match_res_pose_indexes)
+        match_indexes = set(str(match_index_int) for match_index_int in match_indexes_int)
     else:
-        match_substrate_pose_indexes = None
+        # match_substrate_pose_indexes_chainA = None
+        match_indexes = list()
     # coordinate constraint
-    coord_cst_gen = create_coord_cst(pose, match_substrate_pose_indexes)
+    if args.reference_pose:
+        coord_cst_gen = create_coord_cst(ref_pose = ref_pose)#, ligand_res_indexes=match_substrate_pose_indexes)
+    else:
+        coord_cst_gen = create_coord_cst()#ligand_res_indexes=match_substrate_pose_indexes)
     add_csts = AddConstraints()
     add_csts.add_generator(coord_cst_gen)
     add_csts.apply(pose)
     # constraint
-    if args.cst:
+    if args.constraints:
         add_fa_constraints_from_cmdline(pose, sfxn)
     # enzyme design constraint
-    if args.enzdescst:
+    if args.enzyme_design_constraints:
         enzdes_cst = create_enzdes_cst()
         enzdes_cst.apply(pose)
     # declare movers
     movers = list()
-    if args.rmsd:
-        if args.rmsd == 'True':
-            rmsdm = RMSDMetric(pose)
-        else:
-            rmsdm = RMSDMetric(pose, ResidueIndexSelector(args.rmsd))
-        movers.append(rmsdm)
-    if args.des or args.enzdes:
-        if args.nataa:
-            favor_nataa = FavorNativeResidue(pose, 1.5)
-        if args.des:
-            tf = create_design_task_factory(args.des, nbh=args.nbh)
-        elif args.enzdes:
-            tf = create_enzdes_task_factory(args.pdb, pose, nbh=args.nbh)
+    if not args.rmsd:
+        rmsdm = RMSDMetric(pose)
     else:
-        tf = create_relax_task_factory(args.muts, nbh=args.nbh)
-    mm = create_move_map(pose, match_substrate_pose_indexes)
-    fr = create_fast_relax_mover(sfxn, tf, mm)
+        rmsdm = RMSDMetric(pose, ResidueIndexSelector(','.join(str(res) for res in args.rmsd)))
+    movers.append(rmsdm)
+    if args.des or args.substrate or args.enzyme_design:
+        if args.nataa:
+            favor_nataa = FavorNativeResidue(pose, args.nataa)
+        if args.des:
+            tf = create_design_task_factory(args.des, enzdes_cst_indexes = match_indexes, \
+                    neighborhood = args.neighborhood, cystine = args.cystine, ncaas = args.ncaa)
+        elif args.substrate:
+            tf = create_enzyme_design_task_factory(args.substrate, neighborhood = args.neighborhood, \
+                    cystine = args.cystine, ncaas = args.ncaa)
+        elif args.enzyme_design:
+            tf = create_enzyme_design_task_factory(match_indexes, neighborhood = args.neighborhood, \
+                    cystine = args.cystine, ncaas = args.ncaa)
+    else:
+        tf = create_relax_task_factory(point_mutations = args.muts, enzyme_core_indexes = match_indexes, neighborhood = args.neighborhood)
+    # If the substrate is movable (under development)
+    if args.enzyme_design_constraints:
+        mm = create_move_map(pose, ligand_res_indexes = match_substrate_pose_indexes)
+        fr = create_fast_relax_mover(sfxn, tf, move_map = mm)
+    else:
+        fr = create_fast_relax_mover(sfxn, tf)
     movers.append(fr)
     name = args.pdb.split('/')[-1][:-4]
-    run_job_distributor(pose, name, args.decoys, sfxn, *movers)
+    if args.debug_mode:
+        print(pose.fold_tree())
+        if args.enzyme_design_constraints:
+            print(match_substrate_pose_indexes)
+            print(match_res_pose_indexes)
+        print(tf.create_task_and_apply_taskoperations(pose))
+        print(mm)
+    else:
+        run_job_distributor(pose, sfxn, args.decoys, name, args.annotated_name, *movers)
