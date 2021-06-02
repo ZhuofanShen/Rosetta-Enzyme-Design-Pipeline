@@ -45,12 +45,12 @@ def exclude_d_amino_acids(pdb):
     return flag
 
 def get_match_point_mutations(enzdes_cst_remarks):
-    point_mutation_dict = dict()
+    point_mutation_dict = dict() # {"A58": "CYX", "B61": "TYZ"}
     for enzdes_cst_remark in enzdes_cst_remarks:
         point_mutation_dict[enzdes_cst_remark[49] + str(int(enzdes_cst_remark[56:59]))] = enzdes_cst_remark[51:54]
     return point_mutation_dict
 
-def make_relax_input_files(directory, match_dict, duplicate_match=False):
+def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetry=False):
     for position, match_info_list in match_dict.items():
         match_prefix = '_'.join(match_info_list[:-1])
         match = match_prefix + '_1.pdb'
@@ -79,42 +79,102 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False):
             os.mkdir(output_name)
             os.chdir(output_name)
             if duplicate_match:
-                cmd.create('main_chain_linker', 'chain ' + remarks[0][49])
-                cmd.create('duplicate_chain', 'chain ' + remarks[1][49])
-                cmd.align('duplicate_chain', 'main_chain_linker')
-                cmd.save(output_name + '_main_chain_linker.pdb', 'main_chain_linker')
-                cmd.save(output_name + '_duplicate_chain.pdb', 'duplicate_chain')
-                cmd.delete('main_chain_linker')
-                cmd.delete('duplicate_chain')
-                mutated_res_lines = list()
-                with open(output_name + '_duplicate_chain.pdb', 'r') as p_pdb:
+                cmd.create('chain_A_linker', 'chain ' + remarks[0][49])
+                cmd.create('chain_B', 'chain ' + remarks[1][49])
+                # for chain A
+                cmd.create('chain_B_2', 'chain_B')
+                # cmd.align('chain_B_2', 'chain_A_linker')
+                for mutated_res_index in mutations.keys():
+                    if mutated_res_index.startswith('A'):
+                        chain_A_mutated_res_index = mutated_res_index
+                    elif mutated_res_index.startswith('B'):
+                        chain_B_mutated_res_index = mutated_res_index
+                cmd.pair_fit('/chain_B_2//' + chain_B_mutated_res_index[0] + '/' + chain_B_mutated_res_index[1:] + '/N', \
+                        '/chain_A_linker//' + chain_A_mutated_res_index[0] + '/' + chain_B_mutated_res_index[1:] + '/N', \
+                        '/chain_B_2//' + chain_B_mutated_res_index[0] + '/' + chain_B_mutated_res_index[1:] + '/CA', \
+                        '/chain_A_linker//' + chain_A_mutated_res_index[0] + '/' + chain_B_mutated_res_index[1:] + '/CA', \
+                        '/chain_B_2//' + chain_B_mutated_res_index[0] + '/' + chain_B_mutated_res_index[1:] + '/C', \
+                        '/chain_A_linker//' + chain_A_mutated_res_index[0] + '/' + chain_B_mutated_res_index[1:] + '/C')
+                cmd.save(output_name + '_chain_A_linker.pdb', 'chain_A_linker')
+                cmd.save(output_name + '_chain_B_2.pdb', 'chain_B_2')
+                # for chain B
+                if not symmetry:
+                    cmd.create('chain_A_linker_2', 'chain_A_linker')
+                    # cmd.align('chain_A_linker_2', 'chain_B')
+                    cmd.pair_fit('/chain_A_linker_2//' + chain_A_mutated_res_index[0] + '/' + chain_A_mutated_res_index[1:] + '/N', \
+                        '/chain_B//' + chain_B_mutated_res_index[0] + '/' + chain_A_mutated_res_index[1:] + '/N', \
+                        '/chain_A_linker_2//' + chain_A_mutated_res_index[0] + '/' + chain_A_mutated_res_index[1:] + '/CA', \
+                        '/chain_B//' + chain_B_mutated_res_index[0] + '/' + chain_A_mutated_res_index[1:] + '/CA', \
+                        '/chain_A_linker_2//' + chain_A_mutated_res_index[0] + '/' + chain_A_mutated_res_index[1:] + '/C', \
+                        '/chain_B//' + chain_B_mutated_res_index[0] + '/' + chain_A_mutated_res_index[1:] + '/C')
+                    cmd.save(output_name + '_chain_B.pdb', 'chain_B')
+                    cmd.save(output_name + '_chain_A_linker_2.pdb', 'chain_A_linker_2')
+                cmd.delete('chain_A_linker*')
+                cmd.delete('chain_B*')
+                # for chain A
+                chain_B_mutated_res_lines = list()
+                with open(output_name + '_chain_B_2.pdb', 'r') as p_pdb:
                     for line in p_pdb:
                         if line.startswith('ATOM') and line[17:22] == remarks[1][51:54] + \
                             ' ' + remarks[1][49] and int(line[23:26]) == int(remarks[1][56:59]):
-                            mutated_res_lines.append(line[:21] + remarks[0][49] + line[22:])
-                os.remove(output_name + '_duplicate_chain.pdb')
-                with open(output_name + '_main_chain_linker.pdb', 'r+') as p_pdb:
+                            chain_B_mutated_res_lines.append(line[:21] + remarks[0][49] + line[22:])
+                os.remove(output_name + '_chain_B_2.pdb')
+                with open(output_name + '_chain_A_linker.pdb', 'r') as p_pdb:
                     lines = p_pdb.readlines()
-                    p_pdb.seek(0)
+                os.remove(output_name + '_chain_A_linker.pdb')
+                with open(output_name + '_chain_A_dup_match.pdb', 'w') as p_pdb:
                     written_mutated_res_lines = False
                     for line in lines:
                         if line.startswith('ATOM') and line[21] == remarks[0][49] and \
                             int(line[23:26]) == int(remarks[1][56:59]):
                             if not written_mutated_res_lines:
-                                p_pdb.writelines(mutated_res_lines)
+                                p_pdb.writelines(chain_B_mutated_res_lines)
                                 written_mutated_res_lines = True
                         elif not line.startswith('CONECT'):
                             p_pdb.write(line)
-                cmd.load(output_name + '_main_chain_linker.pdb')
-                try:
-                    cmd.save(output_name + '.pdb', output_name + '_main_chain_linker')
-                except:
-                    print('ERROR:' + match_info_list[2] + ' is not processed correctly!')
-                    cmd.delete('*')
-                    os.chdir('..')
-                    continue
-                cmd.delete(output_name + '_main_chain_linker')
-                os.remove(output_name + '_main_chain_linker.pdb')
+                cmd.load(output_name + '_chain_A_dup_match.pdb')
+                # for chain B
+                if not symmetry:
+                    chain_A_mutated_res_lines = list()
+                    chain_A_linker_lines = list()
+                    with open(output_name + '_chain_A_linker_2.pdb', 'r') as p_pdb:
+                        for line in p_pdb:
+                            # mutated residue lines
+                            if line.startswith('ATOM') and line[17:20] == remarks[0][51:54] and \
+                                line[21] == remarks[0][49] and int(line[23:26]) == int(remarks[0][56:59]):
+                                chain_A_mutated_res_lines.append(line[:21] + remarks[1][49] + line[22:])
+                            #linker lines
+                            elif line.startswith('HETATM') and line[17:20] == remarks[0][28:31] and \
+                                line[21] == remarks[0][49]:
+                                chain_A_linker_lines.append(line[:21] + remarks[1][49] + line[22:])
+                    os.remove(output_name + '_chain_A_linker_2.pdb')
+                    with open(output_name + '_chain_B.pdb', 'r') as p_pdb:
+                        lines = p_pdb.readlines()
+                    os.remove(output_name + '_chain_B.pdb')
+                    with open(output_name + '_chain_B_dup_match.pdb', 'w') as p_pdb:
+                        written_mutated_res_lines = False
+                        for line in lines:
+                            if line.startswith('ATOM') and line[21] == remarks[1][49] and \
+                                int(line[23:26]) == int(remarks[0][56:59]):
+                                if not written_mutated_res_lines:
+                                    p_pdb.writelines(chain_A_mutated_res_lines)
+                                    written_mutated_res_lines = True
+                            elif not line.startswith('CONECT') and not line.startswith('END'):
+                                p_pdb.write(line)
+                        p_pdb.writelines(chain_A_linker_lines)
+                        p_pdb.write('END\n')
+                    cmd.load(output_name + '_chain_B_dup_match.pdb')
+                if symmetry:
+                    cmd.save(output_name + '.pdb', output_name + '_chain_A_dup_match')
+                    cmd.delete(output_name + '_chain_A_linker')
+                    os.remove(output_name + '_chain_A_dup_match.pdb')
+                else:
+                    cmd.save(output_name + '.pdb', output_name + '_chain_A_dup_match | ' + output_name + '_chain_B_dup_match')
+                    cmd.delete(output_name + '_chain_A_linker')
+                    cmd.delete(output_name + '_chain_B')
+                    os.remove(output_name + '_chain_A_dup_match.pdb')
+                    os.remove(output_name + '_chain_B_dup_match.pdb')  
+                # write remark lines
                 with open(output_name + '.pdb', 'r+') as p_pdb:
                     lines = p_pdb.readlines()
                     p_pdb.seek(0)
@@ -132,7 +192,11 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False):
                             p_pdb.write('4' + remark[62:])
                     p_pdb.writelines(lines)
             else:
-                cmd.save(output_name + '.pdb', objs[0] + '|' + objs[-1])
+                if symmetry:
+                    cmd.create('chain_A_linker', 'chain ' + remarks[0][49])
+                    cmd.save(output_name + '.pdb', 'chain_A_linker')
+                else:
+                    cmd.save(output_name + '.pdb', objs[0] + '|' + objs[-1])
                 with open(output_name + '.pdb', 'r+') as p_pdb:
                     lines = p_pdb.readlines()
                     p_pdb.seek(0)
@@ -149,7 +213,7 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False):
                         for line in rotamer:
                             if line.startswith('HETATM'):
                                 p_pdb.write(line)
-                        p_pdb.write('ENDMDL\n')
+                        p_pdb.write('TER\n')
                     os.remove(rotamer_name)
             cmd.delete('*')
             os.chdir('..')
@@ -160,7 +224,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('directory', type=str)
     parser.add_argument('-dup', '--duplicate_match', action='store_true')
+    parser.add_argument('-sym', '--symmetry', action='store_true')
     args = parser.parse_args()
 
     match_dict = collect_output_match_info(args.directory)
-    make_relax_input_files(args.directory, match_dict, args.duplicate_match)
+    make_relax_input_files(args.directory, match_dict, args.duplicate_match, args.symmetry)
