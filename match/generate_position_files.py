@@ -52,13 +52,17 @@ def write_position_files(prefix, res_list1, res_list2, workload):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('pdb', type=str)
-    parser.add_argument('-params', type=str, nargs='*')
     parser.add_argument('-chain', type=str, help='Make staples within one chain.')
     parser.add_argument('-chains', type=str, nargs=2, help='Make staples across the interface of two chains.')
     parser.add_argument('-wl', '--workload', type=int, default=1000)
     args = parser.parse_args()
-    if args.params:
-        init('-extra_res_fa ' + ' '.join(args.params))
+
+    params = list()
+    for f in os.listdir():
+        if f.endswith('.params'):
+            params.append(f)
+    if len(params) > 0:
+        init('-extra_res_fa ' + ' '.join(params))
     else:
         init()
     pose = pose_from_pdb(args.pdb)
@@ -72,6 +76,7 @@ if __name__ == '__main__':
         chain_selector = AndResidueSelector(ChainSelector(args.chain), ResiduePropertySelector(ResidueProperty.PROTEIN))
         chain_vector = chain_selector.apply(pose)
         chain_begin = None
+        chain_end = None
         for res_index, res in enumerate(chain_vector):
             if res:
                 if not chain_begin:
@@ -81,11 +86,14 @@ if __name__ == '__main__':
             else:
                 if chain_begin:
                     chain_end = res_index
+                    break
+        if not chain_end:
+            chain_end = res_index
         # Get the begining and the end position of the chain.
         # chain_begin = pose.chain_begin(chain_index)
         # chain_end = pose.chain_end(chain_index)
-        chain_begin_res_list = list(range(chain_begin, chain_begin + 40))
-        chain_end_res_list = list(range(chain_end - 39, chain_end + 1))
+        chain_begin_res_list = list(range(chain_begin, chain_begin + 50))
+        chain_end_res_list = list(range(chain_end - 49, chain_end + 1))
         prefix += '-' + args.chain
         os.mkdir(prefix)
         write_position_files(prefix + '/' + prefix + '_1', chain_begin_res_list, chain_end_res_list, args.workload)
