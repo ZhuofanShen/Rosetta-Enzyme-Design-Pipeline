@@ -40,17 +40,15 @@ def parse_arguments():
     parser.add_argument('-sf', '--score_function', type=str, default='ref2015_cst')
     parser.add_argument('--score_terms', type=str, nargs='*', default=list())
     parser.add_argument('-symm', '--symmetry', type=str)
-    # parser.add_argument('-dup', '--duplicated', action='store_true')
-    # if args.symm and len(chains) > 1: args.duplicated = True
     parser.add_argument('-cst', '--constraints', type=str)
     parser.add_argument('-enzdes_cst', '--enzyme_design_constraints', type=str)
     parser.add_argument('-nbh', '--neighborhood', type=float, default=0)
-    parser.add_argument('-muts', type=int, nargs='*', default=list())
-    parser.add_argument('-nataa', type=float)
+    parser.add_argument('-muts', '--mutations', type=str, nargs='*', default=list())
+    parser.add_argument('-nataa', '--favor_native_residue', type=float)
     parser.add_argument('-no_cys', '--cystine', action='store_false')
-    parser.add_argument('-ncaa', type=str, nargs='*', default=list(), help='name3')
-    parser.add_argument('-des', type=int, nargs='*')
-    parser.add_argument('-subs', '--substrate', type=int, nargs='*')
+    parser.add_argument('-ncaa', '--noncanonical_amino_acids', type=str, nargs='*', default=list(), help='name3')
+    parser.add_argument('-des', '--designable_sites', type=int, nargs='*')
+    parser.add_argument('-subs', '--substrates', type=int, nargs='*')
     parser.add_argument('-enzdes', '--enzyme_design', action='store_true')
     parser.add_argument('-n', '--decoys', type=int, default=50)
     parser.add_argument('-rmsd', type=int, nargs='*', default=list())
@@ -186,17 +184,17 @@ def create_relax_task_factory(point_mutations: list = list(), enzyme_core_indexe
             task_factory.push_back(RestrictToRepacking())
     return task_factory
 
-def create_design_task_factory(mutatable_res_indexes: list, enzdes_cst_indexes: list = list(), \
-        neighborhood: float = 0, cystine: bool = True, ncaas: list = list()):
+def create_design_task_factory(designable_res_indexes: list, enzdes_cst_indexes: list = list(), \
+        neighborhood: float = 0, cystine: bool = True, noncanonical_amino_acids: list = list()):
     task_factory = TaskFactory()
-    if len(ncaas) > 0:
+    if len(noncanonical_amino_acids) > 0:
         ncaa_palette = CustomBaseTypePackerPalette()
-        for ncaa in ncaas:
+        for ncaa in noncanonical_amino_acids:
             ncaa_palette.add_type(ncaa)
         task_factory.set_packer_palette(ncaa_palette)
     task_factory.push_back(IncludeCurrent())
     # Mutatable
-    designable_selector = ResidueIndexSelector(','.join(str(mutatable_res_index) for mutatable_res_index in mutatable_res_indexes))
+    designable_selector = ResidueIndexSelector(','.join(str(designable_res_index) for designable_res_index in designable_res_indexes))
     if not cystine:
         restriction = RestrictAbsentCanonicalAASRLT()
         restriction.aas_to_keep('AGILPVFWYDERHKSTMNQ') # AGILPVFWYDERHKSTCMNQ
@@ -226,11 +224,12 @@ def create_design_task_factory(mutatable_res_indexes: list, enzdes_cst_indexes: 
         task_factory.push_back(OperateOnResidueSubset(repack, designable_selector, True))
     return task_factory
 
-def create_enzyme_design_task_factory(enzyme_core_indexes: list, neighborhood: float = 0, cystine: bool = True, ncaas: list = list()):
+def create_enzyme_design_task_factory(enzyme_core_indexes: list, neighborhood: float = 0, \
+        cystine: bool = True, noncanonical_amino_acids: list = list()):
     task_factory = TaskFactory()
-    if len(ncaas) > 0:
+    if len(noncanonical_amino_acids) > 0:
         ncaa_palette = CustomBaseTypePackerPalette()
-        for ncaa in ncaas:
+        for ncaa in noncanonical_amino_acids:
             ncaa_palette.add_type(ncaa)
         task_factory.set_packer_palette(ncaa_palette)
     task_factory.push_back(IncludeCurrent())
@@ -334,12 +333,10 @@ if __name__ == "__main__":
     # get pose index of the linkers
     if args.enzyme_design_constraints:
         pdb_info = pose.pdb_info()
-        # match_substrate_pose_indexes_chainA = get_match_substrate_pose_indexes(pdb_info, args.pdb)
         match_substrate_pose_indexes, match_res_pose_indexes = get_match_pose_indexes(pdb_info, args.pdb, args.symmetry)
         match_indexes_int = match_substrate_pose_indexes.union(match_res_pose_indexes)
         match_indexes = set(str(match_index_int) for match_index_int in match_indexes_int)
     else:
-        # match_substrate_pose_indexes_chainA = None
         match_indexes = list()
     # coordinate constraint
     if args.reference_pose:
@@ -363,20 +360,21 @@ if __name__ == "__main__":
     else:
         rmsdm = RMSDMetric(pose, ResidueIndexSelector(','.join(str(res) for res in args.rmsd)))
     movers.append(rmsdm)
-    if args.des or args.substrate or args.enzyme_design:
-        if args.nataa:
-            favor_nataa = FavorNativeResidue(pose, args.nataa)
-        if args.des:
-            tf = create_design_task_factory(args.des, enzdes_cst_indexes = match_indexes, \
-                    neighborhood = args.neighborhood, cystine = args.cystine, ncaas = args.ncaa)
-        elif args.substrate:
-            tf = create_enzyme_design_task_factory(args.substrate, neighborhood = args.neighborhood, \
-                    cystine = args.cystine, ncaas = args.ncaa)
+    if args.designable_sites or args.substrates or args.enzyme_design:
+        if args.favor_native_residue:
+            favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
+        if args.designable_sites:
+            tf = create_design_task_factory(args.designable_sites, enzdes_cst_indexes = match_indexes, \
+                    neighborhood = args.neighborhood, cystine = args.cystine, noncanonical_amino_acids = args.noncanonical_amino_acids)
+        elif args.substrates:
+            tf = create_enzyme_design_task_factory(args.substrates, neighborhood = args.neighborhood, \
+                    cystine = args.cystine, noncanonical_amino_acids = args.noncanonical_amino_acids)
         elif args.enzyme_design:
             tf = create_enzyme_design_task_factory(match_indexes, neighborhood = args.neighborhood, \
-                    cystine = args.cystine, ncaas = args.ncaa)
+                    cystine = args.cystine, noncanonical_amino_acids = args.noncanonical_amino_acids)
     else:
-        tf = create_relax_task_factory(point_mutations = args.muts, enzyme_core_indexes = match_indexes, neighborhood = args.neighborhood)
+        tf = create_relax_task_factory(point_mutations = args.mutations, enzyme_core_indexes = match_indexes, \
+                neighborhood = args.neighborhood)
     # If the substrate is movable (under development)
     if args.enzyme_design_constraints:
         mm = create_move_map(pose, ligand_res_indexes = match_substrate_pose_indexes)
