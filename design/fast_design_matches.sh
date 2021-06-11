@@ -60,7 +60,7 @@ cd ${scaffold}_${substrate}
 
 for variant in `ls`
 do
-    if [[ ${variant} == X*Z* ]] && [[ ${variant} != *_deprecated ]] && [ ! -f "${variant}/design" ]
+    if [[ ${variant} == X*Z* ]] && [[ ${variant} != *_deprecated ]] && [ ! -d "${variant}/design" ]
     then
         cd ${variant}
         mkdir design
