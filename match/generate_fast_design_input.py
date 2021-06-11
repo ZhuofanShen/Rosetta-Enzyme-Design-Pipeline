@@ -1,6 +1,7 @@
 import argparse
 import os
 from pymol import *
+import time
 
 
 def collect_output_match_info(directory):
@@ -72,7 +73,7 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
             for mutated_res in mutations.values():
                 cmd.remove('chain A & resi 1 & resn ' + mutated_res)
             objs = cmd.get_object_list()
-            cmd.alter(objs[-1], 'chain="A"')
+            cmd.alter(objs[-1], 'chain="' + remarks[0][49] + '"')
             cmd.alter(objs[-1], 'resi="999"')
             # Output pdb
             output_name = match_info_list[2]
@@ -80,14 +81,14 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
             os.chdir(output_name)
             if duplicate_match:
                 cmd.create('chain_A_linker', 'chain ' + remarks[0][49])
-                cmd.create('chain_B', 'chain ' + remarks[1][49])
+                cmd.create('chain_B', 'chain ' + remarks[-1][49])
                 # for chain A
                 cmd.create('chain_B_2', 'chain_B')
                 # cmd.align('chain_B_2', 'chain_A_linker')
                 for mutated_res_index in mutations.keys():
-                    if mutated_res_index.startswith('A'):
+                    if mutated_res_index.startswith(remarks[0][49]):
                         chain_A_mutated_res_index = mutated_res_index
-                    elif mutated_res_index.startswith('B'):
+                    elif mutated_res_index.startswith(remarks[-1][49]):
                         chain_B_mutated_res_index = mutated_res_index
                 cmd.pair_fit('/chain_B_2//' + chain_B_mutated_res_index[0] + '/' + chain_B_mutated_res_index[1:] + '/N', \
                         '/chain_A_linker//' + chain_A_mutated_res_index[0] + '/' + chain_B_mutated_res_index[1:] + '/N', \
@@ -111,12 +112,13 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
                     cmd.save(output_name + '_chain_A_linker_2.pdb', 'chain_A_linker_2')
                 cmd.delete('chain_A_linker*')
                 cmd.delete('chain_B*')
+                #time.sleep(1)
                 # for chain A
                 chain_B_mutated_res_lines = list()
                 with open(output_name + '_chain_B_2.pdb', 'r') as p_pdb:
                     for line in p_pdb:
-                        if line.startswith('ATOM') and line[17:22] == remarks[1][51:54] + \
-                            ' ' + remarks[1][49] and int(line[23:26]) == int(remarks[1][56:59]):
+                        if line.startswith('ATOM') and line[17:22] == remarks[-1][51:54] + \
+                            ' ' + remarks[-1][49] and int(line[23:26]) == int(remarks[-1][56:59]):
                             chain_B_mutated_res_lines.append(line[:21] + remarks[0][49] + line[22:])
                 os.remove(output_name + '_chain_B_2.pdb')
                 with open(output_name + '_chain_A_linker.pdb', 'r') as p_pdb:
@@ -126,7 +128,7 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
                     written_mutated_res_lines = False
                     for line in lines:
                         if line.startswith('ATOM') and line[21] == remarks[0][49] and \
-                            int(line[23:26]) == int(remarks[1][56:59]):
+                            int(line[23:26]) == int(remarks[-1][56:59]):
                             if not written_mutated_res_lines:
                                 p_pdb.writelines(chain_B_mutated_res_lines)
                                 written_mutated_res_lines = True
@@ -142,11 +144,11 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
                             # mutated residue lines
                             if line.startswith('ATOM') and line[17:20] == remarks[0][51:54] and \
                                 line[21] == remarks[0][49] and int(line[23:26]) == int(remarks[0][56:59]):
-                                chain_A_mutated_res_lines.append(line[:21] + remarks[1][49] + line[22:])
+                                chain_A_mutated_res_lines.append(line[:21] + remarks[-1][49] + line[22:])
                             #linker lines
                             elif line.startswith('HETATM') and line[17:20] == remarks[0][28:31] and \
                                 line[21] == remarks[0][49]:
-                                chain_A_linker_lines.append(line[:21] + remarks[1][49] + line[22:])
+                                chain_A_linker_lines.append(line[:21] + remarks[-1][49] + line[22:])
                     os.remove(output_name + '_chain_A_linker_2.pdb')
                     with open(output_name + '_chain_B.pdb', 'r') as p_pdb:
                         lines = p_pdb.readlines()
@@ -154,7 +156,7 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
                     with open(output_name + '_chain_B_dup_match.pdb', 'w') as p_pdb:
                         written_mutated_res_lines = False
                         for line in lines:
-                            if line.startswith('ATOM') and line[21] == remarks[1][49] and \
+                            if line.startswith('ATOM') and line[21] == remarks[-1][49] and \
                                 int(line[23:26]) == int(remarks[0][56:59]):
                                 if not written_mutated_res_lines:
                                     p_pdb.writelines(chain_A_mutated_res_lines)
@@ -173,23 +175,22 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
                     cmd.delete(output_name + '_chain_A_linker')
                     cmd.delete(output_name + '_chain_B')
                     os.remove(output_name + '_chain_A_dup_match.pdb')
-                    os.remove(output_name + '_chain_B_dup_match.pdb')  
+                    os.remove(output_name + '_chain_B_dup_match.pdb')
+                #time.sleep(1)
                 # write remark lines
                 with open(output_name + '.pdb', 'r+') as p_pdb:
                     lines = p_pdb.readlines()
                     p_pdb.seek(0)
+                    # for chain A
                     for remark in remarks:
-                        p_pdb.write(remark[:26] + 'A' + remark[27:33] + '999' + remark[36:])
+                        p_pdb.write(remark[:26] + remarks[0][49] + remark[27:33] + '999' + remark[36:])
+                    # for chain B
                     for remark in remarks:
-                        p_pdb.write(remark[:26] + 'B' + remark[27:33] + '999' + remark[36:49])
-                        if remark[49] == 'A':
-                            p_pdb.write('B' + remark[50:61])
-                        elif remark[49] == 'B':
-                            p_pdb.write('A' + remark[50:61])
-                        if remark[61] == '1':
-                            p_pdb.write('3' + remark[62:])
-                        elif remark[61] == '2':
-                            p_pdb.write('4' + remark[62:])
+                        p_pdb.write(remark[:26] + remarks[-1][49] + remark[27:33] + '999' + remark[36:49])
+                        if remark[49] == remarks[0][49]:
+                            p_pdb.write(remarks[-1][49] + remark[50:61] + str(int(remark[61]) + len(remarks)) + remark[62:])
+                        elif remark[49] == remarks[-1][49]:
+                            p_pdb.write(remarks[0][49] + remark[50:61] + str(int(remark[61]) + len(remarks)) + remark[62:])
                     p_pdb.writelines(lines)
             else:
                 if symmetry:
@@ -197,11 +198,12 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
                     cmd.save(output_name + '.pdb', 'chain_A_linker')
                 else:
                     cmd.save(output_name + '.pdb', objs[0] + '|' + objs[-1])
+                #time.sleep(1)
                 with open(output_name + '.pdb', 'r+') as p_pdb:
                     lines = p_pdb.readlines()
                     p_pdb.seek(0)
                     for remark in remarks:
-                        p_pdb.write(remark[:26] + 'A' + remark[27:33] + '999' + remark[36:])
+                        p_pdb.write(remark[:26] + remarks[0][49] + remark[27:33] + '999' + remark[36:])
                     p_pdb.writelines(lines)
             # Output rotlib
             with open(remarks[0][28:31] + '.rotlib.pdb', 'w+') as p_pdb:
