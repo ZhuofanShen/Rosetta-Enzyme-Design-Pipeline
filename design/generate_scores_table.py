@@ -132,18 +132,16 @@ def move_ligand_position(path_to_variant, best_decoy, linker_res_name):
             elif not line.startswith('CONECT'):
                 pdb.write(line)
 
-def read_constraint_score(path_to_best_decoy):
+def read_match_res_scores(path_to_best_decoy):
     with open(path_to_best_decoy, 'r') as pdb:
-        cst_scores = list()
+        match_res_score = dict()
         for line in pdb:
             if line[3:7] == ':MP-':
                 scores = line.split(' ')
-                cst_scores.append(scores[-14])
-                cst_scores.append(scores[-12])
-                cst_scores.append(scores[-11])
-        return cst_scores
+                match_res_score[line[:3]] = (str(float(scores[-1]) - float(scores[-13])), scores[-14], scores[-12], scores[-11])
+        return match_res_score
 
-def write_initial_design_score(arguments, params_files_py):
+def write_initial_design_scores(arguments, params_files_py):
     # create a new xls workbook
     workbook = xlwt.Workbook(encoding="ascii")
     directory_sheet = workbook.add_sheet("directory")
@@ -169,11 +167,12 @@ def write_initial_design_score(arguments, params_files_py):
         initial_design_sheet.write(row, 1, round(best_score, 2))
         initial_design_sheet.write(row, 2, best_decoy[best_decoy.rfind('_') + 1: -4])
         manual_design_sheet.write(row, 0, arguments.scaffold + '_' + '_'.join(design_pdb_numbering))
-        cst_scores = read_constraint_score(arguments.directory + '/' + variant + '/design/' + best_decoy)
+        match_res_scores = read_match_res_scores(arguments.directory + '/' + variant + '/design/' + best_decoy)
         col = 3
-        for cst_score in cst_scores:
-            initial_design_sheet.write(row, col, cst_score)
-            col += 1
+        for match_res in sorted(match_res_scores, key=match_res_scores.get):
+            for match_res_score_term in match_res_scores[match_res]:
+                initial_design_sheet.write(row, col, match_res_score_term)
+                col += 1
         # write the relax script
         if len(design_pose_numbering) > 2:
             muts_arg = ' -muts'
@@ -231,17 +230,18 @@ def get_relaxed_design_scores(arguments):
         design_sheet.write(row, 0, arguments.scaffold + '_'  + '_'.join(design_pdb_numbering))
         design_sheet.write(row, 1, str(round(best_score, 2)))
         design_sheet.write(row, 2, best_decoy.split("_")[-1][:-4])
-        cst_scores = read_constraint_score(arguments.directory + '/' + variant + '/manual_design/' + best_decoy)
+        match_res_scores = read_match_res_scores(arguments.directory + '/' + variant + '/manual_design/' + best_decoy)
         col = 3
-        for cst_score in cst_scores:
-            design_sheet.write(row, col, cst_score)
-            col += 1
+        for match_res in sorted(match_res_scores, key=match_res_scores.get):
+            for match_res_score_term in match_res_scores[match_res]:
+                design_sheet.write(row, col, match_res_score_term)
+                col += 1
     workbook_write.save(arguments.directory + '/' + arguments.directory + '.xls')
 
 if __name__ == "__main__":
     args, params_files, params_files_py = parse_arguments()
     init(params_files)
     if args.step == 1:
-        write_initial_design_score(args, params_files_py)
+        write_initial_design_scores(args, params_files_py)
     elif args.step == 2:
         get_relaxed_design_scores(args)
