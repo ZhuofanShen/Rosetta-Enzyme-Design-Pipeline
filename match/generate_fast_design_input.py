@@ -52,11 +52,12 @@ def get_match_point_mutations(enzdes_cst_remarks):
     return point_mutation_dict
 
 def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetry=False):
-    for position, match_info_list in match_dict.items():
+    for position, match_info_list in match_dict.items(): # X384Z115: ['UM', '2', 'X384Z115', 'CPG2', 'relaxed', 'pCaaF-TS', '10']
         match_prefix = '_'.join(match_info_list[:-1])
         match = match_prefix + '_1.pdb'
         remarks = read_enz_des_remark_lines(directory + '/' + match)
-        if exclude_d_amino_acids(directory + '/' + match):
+        if not os.path.isdir(position) and not os.path.isdir(position + '_deprecated') and \
+                exclude_d_amino_acids(directory + '/' + match):
             # Read
             has_protein_scaffold = False
             for i in range(1, int(match_info_list[-1]) + 1):
@@ -76,7 +77,7 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
             cmd.alter(objs[-1], 'chain="' + remarks[0][49] + '"')
             cmd.alter(objs[-1], 'resi="999"')
             # Output pdb
-            output_name = match_info_list[2]
+            output_name = position
             os.mkdir(output_name)
             os.chdir(output_name)
             if duplicate_match:
