@@ -155,7 +155,8 @@ def write_initial_design_scores(arguments, params_files_py):
     initial_ref_seq, ref_annotation_dict = read_annotated_sequence(ref_pose.annotated_sequence(), arguments.symmetry)
     # iterate through all designs
     row = 0
-    for variant in sorted(filter(lambda x: x.startswith('X') and not x.endswith('_deprecated'), os.listdir(arguments.directory))):
+    for variant in sorted(filter(lambda x: x.startswith('X') and not x.endswith('_deprecated') and \
+            os.path.isdir(arguments.directory + '/' + x + '/design'), os.listdir(arguments.directory))):
         # get the best decoy and score, and the designed residues
         design_pose_numbering, design_pdb_numbering, best_decoy, best_score = \
             get_best_decoy_and_mutations(arguments.directory + '/' + variant + '/design', initial_ref_seq, linker_res_name, arguments.symmetry)
