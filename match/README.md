@@ -53,7 +53,7 @@ Make sure that the Anaconda3 has initialized each time you login your Amarel acc
 > source ~/anaconda3/bin/activate
 
 Make staples across chain A and chain B
-> ../scripts/generate_fast_design_input.sh -pos ../CPG2/CPG2-AB -dup true
+> ../scripts/generate_fast_design_input.sh -pos ../CPG2/CPG2-AB -dup true -sym true
 
 or make staples within chain A
 > ../scripts/generate_fast_design_input.sh -pos ../CPG2/CPG2-A -sym true
