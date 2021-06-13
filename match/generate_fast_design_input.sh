@@ -31,11 +31,11 @@ do
         do
             if [[ ${pos_part} == ${scaffold}_* ]]
             then
-                python ../../scripts/generate_fast_design_input.py ${pos_part} ${duplicate_match} ${symmetry}
+                python ../../../scripts-match/generate_fast_design_input.py ${pos_part} ${duplicate_match} ${symmetry}
             fi
         done
         cd ..
     fi
 done
 
-python ../scripts/find_match_intersection.py ${directories}
+python ../../scripts-match/find_match_intersection.py ${directories}
