@@ -5,7 +5,7 @@ do
         -pos) position_files="$2";; # i.e. ../CPG2/CPG2-AB
         -head) head="$2";; # head threshold, pdb numbering, optional
         -tail) tail="$2";; # tail threshold, pdb numbering, optional
-        -ligand) ligand="$2";; # i.e. ../pAaF/pAaF-product
+        -lig) ligand="$2";; # i.e. ../pAaF/pAaF-product
         -cst_suffix) cst_suffix="$2";; # optional
         -nbh) neighborhood="$2";; # optional
         -n) decoys="$2";; # optional
