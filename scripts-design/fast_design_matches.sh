@@ -5,7 +5,7 @@ do
         -pos) position_files="$2";; # i.e. ../CPG2/CPG2-AB
         -head) head="$2";; # head threshold, pdb numbering, optional
         -tail) tail="$2";; # tail threshold, pdb numbering, optional
-        -linker) linker="$2";; # i.e. ../pAaF/pAaF-product
+        -ligand) ligand="$2";; # i.e. ../pAaF/pAaF-product
         -cst_suffix) cst_suffix="$2";; # optional
         -nbh) neighborhood="$2";; # optional
         -n) decoys="$2";; # optional
@@ -40,7 +40,7 @@ fi
 # fi
 
 params_files="-params"
-for params_file in `ls ${linker}/*.params`
+for params_file in `ls ${ligand}/*.params`
 do
     params_files=${params_files}" ../../../"${params_file}
 done
@@ -57,7 +57,7 @@ do
 done
 
 scaffold=${position_files##*/}
-substrate=${linker##*/}
+substrate=${ligand##*/}
 cd ${scaffold}_${substrate}
 
 for variant in `ls`
@@ -76,7 +76,7 @@ do
                 "python ../../../../../scripts-design/fast_design.py ../${variant}.pdb \
                 ${params_files} ${symmetry} -sf ref2015_cst \
                 --score_terms fa_intra_rep_nonprotein:0.545 fa_intra_atr_nonprotein:1 \
-                -enzdes_cst ../../../${linker}/${substrate}${enzdes_cst_suffix} \
+                -enzdes_cst ../../../${ligand}/${substrate}${enzdes_cst_suffix} \
                 -enzdes -no_cys -nataa 1.5 ${neighborhood} ${decoys};"
             cd ../..
             sleep 0.05

@@ -3,7 +3,7 @@ while (( $# > 1 ))
 do
     case $1 in
         -pos) position_files="$2";; # i.e. ../CPG2/CPG2-AB
-        -linker) linker="$2";; # i.e. ../pAaF/pAaF-product
+        -lig) ligand="$2";; # i.e. ../pAaF/pAaF-product
         -mem) memory="$2";;
         *) break;
     esac
@@ -27,7 +27,7 @@ IFS='
 
 scaffold=${position_files##*/}
 protein=${scaffold%-*}
-substrate=${linker##*/}
+substrate=${ligand##*/}
 reference_pdb=$(ls ${path_to_protein}/${protein}*.pdb)
 
 mkdir ${scaffold}_${substrate}
@@ -40,7 +40,7 @@ do
     mkdir ${scaffold_part}
     cd ${scaffold_part}
     slurmit.py --job ${scaffold_part} --mem ${memory} --command "~/Rosetta/main/source/bin/match.default.linuxgccrelease \
-        @../../../../scripts-match/general_match.flags @../../../${linker}/subs.flags ${params_files} \
+        @../../../../scripts-match/general_match.flags @../../../${ligand}/subs.flags ${params_files} \
         -match:scaffold_active_site_residues_for_geomcsts ../${pos} -s ../../${reference_pdb}"
     cd ..
     sleep 0.1

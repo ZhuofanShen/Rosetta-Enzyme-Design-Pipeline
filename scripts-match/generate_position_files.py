@@ -92,8 +92,8 @@ if __name__ == '__main__':
         # Get the begining and the end position of the chain.
         # chain_begin = pose.chain_begin(chain_index)
         # chain_end = pose.chain_end(chain_index)
-        chain_begin_res_list = list(range(chain_begin, chain_begin + 50))
-        chain_end_res_list = list(range(chain_end - 49, chain_end + 1))
+        chain_begin_res_list = list(range(chain_begin, chain_begin + 100))
+        chain_end_res_list = list(range(chain_end - 99, chain_end + 1))
         prefix += '-' + args.chain
         os.mkdir(prefix)
         write_position_files(prefix + '/' + prefix + '_1', chain_begin_res_list, chain_end_res_list, args.workload)
