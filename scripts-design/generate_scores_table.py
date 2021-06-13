@@ -17,25 +17,28 @@ def parse_arguments():
     args.scaffold = scaffold_substrate[0] # CPG2-AB
     args.protein = args.scaffold[:args.scaffold.find('-')] # CPG2
     args.substrate = scaffold_substrate[1] # pCaaF-product
-    args.linker = args.substrate[:args.substrate.find('-')] # pCaaF
+    args.ligand = args.substrate[:args.substrate.find('-')] # pCaaF
     # symmetry file
     args.symmetry = None
-    for protein_symm in filter(lambda x: x.startswith(args.protein) and x.endswith('.symm'), os.listdir('../' + args.protein)):
+    for protein_symm in filter(lambda x: x.startswith(args.protein) and x.endswith('.symm'), os.listdir('../../proteins/' + args.protein)):
         args.symmetry = protein_symm
         break
     # pdb file
-    for protein_pdb in filter(lambda x: x.startswith(args.protein) and x.endswith('.pdb'), os.listdir('../' + args.protein)):
+    for protein_pdb in filter(lambda x: x.startswith(args.protein) and x.endswith('.pdb'), os.listdir('../../proteins/' + args.protein)):
         args.pdb = protein_pdb
         break
     # params files
     params_files = '-extra_res_fa '
     params_files_py = '-params '
-    for params in filter(lambda x: x.endswith('.params'), os.listdir('../' + args.protein)):
-        params_files += '../' + args.protein + '/' + params + ' '
-        params_files_py += '../../../../' + args.protein + '/' + params + ' '
-    for params in filter(lambda x: x.endswith('.params'), os.listdir('../' + args.linker + '/' + args.substrate)):
-        params_files += '../' + args.linker + '/' + args.substrate + '/' + params + ' '
-        params_files_py += '../../../../' + args.linker + '/' + args.substrate + '/' + params + ' '
+    for params in filter(lambda x: x.endswith('.params'), os.listdir('../../ligands/' + args.ligand + '/' + args.substrate)):
+        params_files += '../../ligands/' + args.ligand + '/' + args.substrate + '/' +  params + ' '
+        if params.endswith('_ligand.params'):
+            params_files_py += '../' + params + ' '
+        else:
+            params_files_py += '../../../../../ligands/' + args.ligand + '/' + args.substrate + '/' + params + ' '
+    for params in filter(lambda x: x.endswith('.params'), os.listdir('../../proteins/' + args.protein)):
+        params_files += '../../proteins/' + args.protein + '/' + params + ' '
+        params_files_py += '../../../../../ligands/' + args.protein + '/' + params + ' '
     return args, params_files, params_files_py
 
 def load_scores_from_fasc(variant):
@@ -82,16 +85,16 @@ def read_annotated_sequence(annotated_sequence, symmetric):
                 sequence += annotated_sequence[index]
     return sequence, annotation_dict
 
-def insert_linker_residue_into_reference_sequence(reference_sequence, sequence, annotation_dict, linker_res_name):
+def insert_ligand_residue_into_reference_sequence(reference_sequence, sequence, annotation_dict, ligand_res_name):
     extra_res_index_list = list()
     for index, annotation in annotation_dict.items():
-        if annotation[:annotation.find(':')] == linker_res_name:
+        if annotation[:annotation.find(':')] == ligand_res_name:
             extra_res_index_list.append(int(index)) # sequence string index
     for index in sorted(extra_res_index_list):
         reference_sequence = reference_sequence[:index] + sequence[index] + reference_sequence[index:]
     return reference_sequence
 
-def get_best_decoy_and_mutations(path, initial_ref_seq, linker_res_name, symmetric):
+def get_best_decoy_and_mutations(path, initial_ref_seq, ligand_res_name, symmetric):
     # get the file name of the best decoy
     scores = load_scores_from_fasc(path)
     best_decoy_scores = extract_n_decoys(scores)
@@ -100,8 +103,8 @@ def get_best_decoy_and_mutations(path, initial_ref_seq, linker_res_name, symmetr
     # get the sequence of the best decoy
     pose = pose_from_pdb(path + '/' + best_decoy)
     seq, annotation_dict = read_annotated_sequence(pose.annotated_sequence(), symmetric)
-    # insert the linker residue into the original reference pose
-    ref_seq = insert_linker_residue_into_reference_sequence(initial_ref_seq, seq, annotation_dict, linker_res_name)
+    # insert the ligand residue into the original reference pose
+    ref_seq = insert_ligand_residue_into_reference_sequence(initial_ref_seq, seq, annotation_dict, ligand_res_name)
     # compare the sequences and rename the best decoy with the point mutation information
     design_pose_numbering = list()
     design_pdb_numbering = list()
@@ -112,18 +115,18 @@ def get_best_decoy_and_mutations(path, initial_ref_seq, linker_res_name, symmetr
             design_pdb_numbering.append(chain + ref_seq[index] + pdb_index + seq[index])
     return design_pose_numbering, design_pdb_numbering, best_decoy, best_score
 
-def move_ligand_position(path_to_variant, best_decoy, linker_res_name):
+def move_ligand_position(path_to_variant, best_decoy, ligand_res_name):
     with open(path_to_variant + '/design/' + best_decoy, 'r') as pdb:
         ligand_lines = list()
         for line in pdb:
-            if ( line.startswith('ATOM') or line.startswith('HETATM') ) and line[17:20] == linker_res_name:
+            if ( line.startswith('ATOM') or line.startswith('HETATM') ) and line[17:20] == ligand_res_name:
                 ligand_lines.append(line)
     with open(path_to_variant + '/' + path_to_variant.split('/')[-1] + '.pdb', 'r') as pdb:
         lines = pdb.readlines()
     with open(path_to_variant + '/' + path_to_variant.split('/')[-1] + '-ligand.pdb', 'w') as pdb:
         current_ligand_chain = None
         for line in lines:
-            if line[17:20] == linker_res_name:
+            if line[17:20] == ligand_res_name:
                 if current_ligand_chain != line[21]:
                     current_ligand_chain = line[21]
                     for ligand_line in ligand_lines:
@@ -149,9 +152,9 @@ def write_initial_design_scores(arguments, params_files_py):
     manual_design_sheet = workbook.add_sheet("manual_design")
     #workbook.add_sheet("greedy_opt_design")
     # get the reference sequence
-    for linker_params in filter(lambda x: x.endswith('_ligand.params'), os.listdir('../' + args.linker + '/' + args.substrate)):
-        linker_res_name = linker_params[:-14]
-    ref_pose = pose_from_pdb('../' + arguments.protein + '/' + arguments.pdb)
+    for ligand_params in filter(lambda x: x.endswith('_ligand.params'), os.listdir('../../ligands/' + args.ligand + '/' + args.substrate)):
+        ligand_res_name = ligand_params[:-14]
+    ref_pose = pose_from_pdb('../../proteins/' + arguments.protein + '/' + arguments.pdb)
     initial_ref_seq, ref_annotation_dict = read_annotated_sequence(ref_pose.annotated_sequence(), arguments.symmetry)
     # iterate through all designs
     row = 0
@@ -159,9 +162,9 @@ def write_initial_design_scores(arguments, params_files_py):
             os.path.isdir(arguments.directory + '/' + x + '/design'), os.listdir(arguments.directory))):
         # get the best decoy and score, and the designed residues
         design_pose_numbering, design_pdb_numbering, best_decoy, best_score = \
-            get_best_decoy_and_mutations(arguments.directory + '/' + variant + '/design', initial_ref_seq, linker_res_name, arguments.symmetry)
+            get_best_decoy_and_mutations(arguments.directory + '/' + variant + '/design', initial_ref_seq, ligand_res_name, arguments.symmetry)
         # reformat the best decoy
-        move_ligand_position(arguments.directory + '/' + variant, best_decoy, linker_res_name)
+        move_ligand_position(arguments.directory + '/' + variant, best_decoy, ligand_res_name)
         # write to the score table
         directory_sheet.write(row, 0, variant)
         initial_design_sheet.write(row, 0, arguments.scaffold + '_' + '_'.join(design_pose_numbering))
@@ -187,14 +190,14 @@ def write_initial_design_scores(arguments, params_files_py):
             suffix = '_design.cst'
         with open(arguments.directory + '/' + variant + '/manual_design.sh', 'w+') as bash:
             if arguments.symmetry:
-                symmetry_arg = ' -symm ../../../../' + arguments.protein + '/' + arguments.symmetry
+                symmetry_arg = ' -symm ../../../../../proteins/' + arguments.protein + '/' + arguments.symmetry
             else:
                 symmetry_arg = ''
             bash.write('mkdir manual_design;\ncd manual_design;\nslurmit.py --job ' + variant + 
 ' --command "python ../../../../../scripts-design/fast_design.py ../' + variant + '-ligand.pdb' + 
 symmetry_arg + ' -sf ref2015_cst --score_terms fa_intra_rep_nonprotein:0.545 \
-fa_intra_atr_nonprotein:1 ' + params_files_py + '-enzdes_cst ../../../../' + 
-arguments.linker + '/' + arguments.substrate + '/' + arguments.substrate + 
+fa_intra_atr_nonprotein:1 ' + params_files_py + '-enzdes_cst ../../../../../ligands/' + 
+arguments.ligand + '/' + arguments.substrate + '/' + arguments.substrate + 
 suffix + muts_arg + ' -nbh 8.0 -n 50;"\ncd ..;\n')
         with open(arguments.directory + '/' + variant + '/pymol.txt', 'w+') as pymol:
             resi = str()
@@ -213,8 +216,8 @@ def get_relaxed_design_scores(arguments):
     workbook_write = copy(workbook_read)
     design_sheet = workbook_write.get_sheet(2) # step
     # get the reference sequence
-    for linker_params in filter(lambda x: x.endswith('_ligand.params'), os.listdir('../' + args.linker + '/' + args.substrate)):
-        linker_res_name = linker_params[:-14]
+    for ligand_params in filter(lambda x: x.endswith('_ligand.params'), os.listdir('../../ligands/' + args.ligand + '/' + args.substrate)):
+        ligand_res_name = ligand_params.trim('_ligand.params')
     ref_pose = pose_from_pdb('../' + arguments.protein + '/' + arguments.pdb)
     initial_ref_seq, ref_annotation_dict = read_annotated_sequence(ref_pose.annotated_sequence(), arguments.symmetry)
     # iterate through all designs
@@ -226,7 +229,7 @@ def get_relaxed_design_scores(arguments):
         print(variant)
         # get the best decoy and score, and the designed residues
         design_pose_numbering, design_pdb_numbering, best_decoy, best_score = \
-            get_best_decoy_and_mutations(path, initial_ref_seq, linker_res_name, arguments.symmetry)
+            get_best_decoy_and_mutations(path, initial_ref_seq, ligand_res_name, arguments.symmetry)
         # write to the score table
         design_sheet.write(row, 0, arguments.scaffold + '_'  + '_'.join(design_pdb_numbering))
         design_sheet.write(row, 1, str(round(best_score, 2)))

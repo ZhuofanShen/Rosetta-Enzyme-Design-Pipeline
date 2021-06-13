@@ -52,13 +52,8 @@ def get_match_point_mutations(enzdes_cst_remarks):
         point_mutation_dict[enzdes_cst_remark[49] + str(int(enzdes_cst_remark[56:59]))] = enzdes_cst_remark[51:54]
     return point_mutation_dict
 
-def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetry=False, debug_mode=False):
-    linker_state = directory.split('_')[1]
-    linker = linker_state.split('-')[0]
-    for ligand_params in os.listdir('../../../ligands/' + linker + '/' + linker_state):
-        if ligand_params.endswith('_ligand.params'):
-            ligand_params_original_path = '../../../../ligands/' + linker + '/' + linker_state + '/' + ligand_params
-            break
+def make_relax_input_files(directory, match_dict, original_ligand_params_path, duplicate_match=False, symmetry=False, debug_mode=False):
+    ligand_params = original_ligand_params_path.split('/')[-1]
     for position, match_info_list in match_dict.items(): # X384Z115: ['UM', '2', 'X384Z115', 'CPG2', 'relaxed', 'pCaaF-TS', '10']
         match_prefix = '_'.join(match_info_list[:-1])
         match = match_prefix + '_1.pdb'
@@ -227,7 +222,7 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
                     os.remove(rotamer_name)
             cmd.delete('*')
             # Copy the ligand params file to the current directory
-            shutil.copyfile(ligand_params_original_path, ligand_params)
+            shutil.copyfile('../' + original_ligand_params_path, ligand_params)
             os.chdir('..')
             if debug_mode:
                 break
@@ -236,10 +231,11 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('directory', type=str)
+    parser.add_argument('--ligand_params', type=str, required=True)
     parser.add_argument('-dup', '--duplicate_match', action='store_true')
     parser.add_argument('-sym', '--symmetry', action='store_true')
     parser.add_argument('-debug', '--debug_mode', action='store_true')
     args = parser.parse_args()
 
     match_dict = collect_output_match_info(args.directory)
-    make_relax_input_files(args.directory, match_dict, args.duplicate_match, args.symmetry, args.debug_mode)
+    make_relax_input_files(args.directory, match_dict, args.ligand_params, args.duplicate_match, args.symmetry, args.debug_mode)

@@ -5,6 +5,7 @@ do
         -pos) position_files="$2";;
         -dup) duplicate_match="$2";; # optional
         -sym) symmetry="$2";; # optional
+        -debug) debug="$2";; # optional
         *) break;
     esac
     shift 2
@@ -20,21 +21,32 @@ then
     symmetry="--symmetry"
 fi
 
+if ! [ -z "${debug}" ]
+then
+    debug="--debug_mode"
+fi
+
 scaffold=${position_files##*/}
-for scaffold_linker in `ls`
+for protein_ligand in `ls`
 do
-    if [[ ${scaffold_linker} == ${scaffold}_* ]]
+    if [[ ${protein_ligand} == ${scaffold}_* ]]
     then
-        directories=${directories}" "${scaffold_linker}
-        cd ${scaffold_linker}
+        substrate=${protein_ligand#*_}
+        ligand=${substrate%-*}
+        for ligand_params in `ls ../../ligands/${ligand}/${substrate}/*_ligand.params`
+        do
+            break
+        done
+        cd ${protein_ligand}
         for pos_part in `ls`
         do
             if [[ ${pos_part} == ${scaffold}_* ]]
             then
-                python ../../../scripts-match/generate_fast_design_input.py ${pos_part} ${duplicate_match} ${symmetry}
+                python ../../../scripts-match/generate_fast_design_input.py ${pos_part} --ligand_params ../${ligand_params} ${duplicate_match} ${symmetry} ${debug}
             fi
         done
         cd ..
+        directories=${directories}" "${protein_ligand}
     fi
 done
 

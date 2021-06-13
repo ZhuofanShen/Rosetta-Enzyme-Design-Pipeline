@@ -2,10 +2,10 @@
 while (( $# > 1 ))
 do
     case $1 in
-        -pos) position_files="$2";; # i.e. ../CPG2/CPG2-AB
+        -pos) position_files="$2";; # i.e. ../../proteins/CPG2/CPG2-AB
         -head) head="$2";; # head threshold, pdb numbering, optional
         -tail) tail="$2";; # tail threshold, pdb numbering, optional
-        -lig) ligand="$2";; # i.e. ../pAaF/pAaF-product
+        -lig) ligand="$2";; # i.e. ../../ligands/pAaF/pAaF-product
         -cst_suffix) cst_suffix="$2";; # optional
         -nbh) neighborhood="$2";; # optional
         -n) decoys="$2";; # optional
@@ -42,7 +42,12 @@ fi
 params_files="-params"
 for params_file in `ls ${ligand}/*.params`
 do
-    params_files=${params_files}" ../../../"${params_file}
+    if [[ ${params_file} == *_ligand.params ]]
+    then
+        params_files=${params_files}" ../"${params_file##*/}
+    else
+        params_files=${params_files}" ../../../"${params_file}
+    fi
 done
 path_to_protein=${position_files%/*}
 for params_file in `ls ${path_to_protein}/*.params`
@@ -67,7 +72,7 @@ do
         x=${variant%Z*}
         x_index=${x:1}
         z_index=${variant#*Z}
-        if ! [ -z "${head}" ] && ! [ -z "${tail}" ] && ( [ ${x_index} -lt ${head} ] && [ ${z_index} -gt ${tail} ] ) || ( [ ${x_index} -gt ${head} ] && [ ${z_index} -lt ${tail} ] )
+        if ! [ -z "${head}" ] && ! [ -z "${tail}" ] && ( ( [ ${x_index} -lt ${head} ] && [ ${z_index} -gt ${tail} ] ) || ( [ ${z_index} -lt ${head} ] && [ ${x_index} -gt ${tail} ] ) )
         then
             cd ${variant}
             mkdir design
