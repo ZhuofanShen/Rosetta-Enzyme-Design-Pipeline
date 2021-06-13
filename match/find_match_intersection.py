@@ -36,7 +36,7 @@ def intersection(state_match_dict):
             first_intersection = True
     for state in state_match_dict.keys():
         for match in os.listdir(state):
-            if match.startswith('X') and not match.endswith('_deprecated') and match not in match_intersection:
+            if match not in match_intersection and not match.endswith('_deprecated'):
                 os.rename(state + '/' + match, state + '/' + match + '_deprecated')
 
 if __name__ == '__main__':
