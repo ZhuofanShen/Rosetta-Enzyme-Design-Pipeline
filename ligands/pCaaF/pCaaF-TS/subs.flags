@@ -1,3 +1,3 @@
--extra_res_fa ../../../pCaaF/pCaaF-TS/CAF_ligand.params ../../../pCaaF/pCaaF-TS/TYZ.params ../../../pCaaF/pCaaF-TS/CYX.params
+-extra_res_fa ../../../../ligands/pCaaF/pCaaF-TS/CAF_ligand.params ../../../../ligands/pCaaF/pCaaF-TS/TYZ.params ../../../../ligands/pCaaF/pCaaF-TS/CYX.params
 -match:lig_name CAF 
--match:geometric_constraint_file ../../../pCaaF/pCaaF-TS/pCaaF-TS.cst
+-match:geometric_constraint_file ../../../../ligands/pCaaF/pCaaF-TS/pCaaF-TS.cst
