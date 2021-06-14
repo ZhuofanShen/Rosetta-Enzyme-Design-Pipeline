@@ -4,7 +4,7 @@ do
     case $1 in
         -pos) position_files="$2";;
         -dup) duplicate_match="$2";; # optional
-        -sym) symmetry="$2";; # optional
+        -symm) symmetry="$2";; # optional
         -debug) debug="$2";; # optional
         *) break;
     esac

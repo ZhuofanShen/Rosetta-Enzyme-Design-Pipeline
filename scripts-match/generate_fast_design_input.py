@@ -233,7 +233,7 @@ if __name__ == '__main__':
     parser.add_argument('directory', type=str)
     parser.add_argument('--ligand_params', type=str, required=True)
     parser.add_argument('-dup', '--duplicate_match', action='store_true')
-    parser.add_argument('-sym', '--symmetry', action='store_true')
+    parser.add_argument('-symm', '--symmetry', action='store_true')
     parser.add_argument('-debug', '--debug_mode', action='store_true')
     args = parser.parse_args()
 
