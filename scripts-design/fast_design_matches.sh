@@ -35,6 +35,7 @@ else
 fi
 
 if [ -z "${memory}" ]
+then
     memory="2000"
 fi
 
