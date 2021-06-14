@@ -27,17 +27,17 @@ then
 fi
 
 scaffold=${position_files##*/}
-for protein_ligand in `ls`
+for scaffold_substrate in `ls`
 do
-    if [[ ${protein_ligand} == ${scaffold}_* ]]
+    if [[ ${scaffold_substrate} == ${scaffold}_* ]]
     then
-        substrate=${protein_ligand#*_}
+        substrate=${scaffold_substrate#*_}
         ligand=${substrate%-*}
         for ligand_params in `ls ../../ligands/${ligand}/${substrate}/*_ligand.params`
         do
             break
         done
-        cd ${protein_ligand}
+        cd ${scaffold_substrate}
         for pos_part in `ls`
         do
             if [[ ${pos_part} == ${scaffold}_* ]]
@@ -46,7 +46,7 @@ do
             fi
         done
         cd ..
-        directories=${directories}" "${protein_ligand}
+        directories=${directories}" "${scaffold_substrate}
     fi
 done
 

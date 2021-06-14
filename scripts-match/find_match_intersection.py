@@ -4,12 +4,18 @@ import glob, os, shutil
 
 def load_matches(directories):
     state_match_dict = dict()
+    scaffold = None
     for directory in directories:
+        if scaffold:
+            if directory.split('_')[0] != scaffold:
+                raise Exception:
+        else:
+            scaffold = directory.split('_')[0]
         match_set = set()
         for variant in filter(lambda x: os.path.isfile(directory + '/' + x + '/' + x + '.pdb'), os.listdir(directory)):
             match_set.add(variant)
         state_match_dict.update({directory: match_set})
-    return state_match_dict
+    return state_match_dict, scaffold
 
 def merge_states(state_match_dict):
     states = state_match_dict.keys()
@@ -26,7 +32,7 @@ def merge_states(state_match_dict):
                 if scaffold2 == scaffold1 and substrate2[:substrate2.rfind('-')] == substrate1_general:
                     state_match_dict[state1].update(state_match_dict[state2])
 
-def intersection(state_match_dict):
+def intersection(state_match_dict, scaffold):
     first_intersection = False
     for matches in state_match_dict.values():
         if first_intersection:
@@ -36,7 +42,7 @@ def intersection(state_match_dict):
             first_intersection = True
     for state in state_match_dict.keys():
         for match in os.listdir(state):
-            if match not in match_intersection and not match.endswith('_deprecated'):
+            if match not in match_intersection and not match.startswith(scaffold + '_') and not match.endswith('_deprecated'):
                 os.rename(state + '/' + match, state + '/' + match + '_deprecated')
 
 if __name__ == '__main__':
@@ -45,4 +51,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
     state_matches = load_matches(args.directories)
     merge_states(state_matches)
-    intersection(state_matches)
+    intersection(state_matches, scaffold)
