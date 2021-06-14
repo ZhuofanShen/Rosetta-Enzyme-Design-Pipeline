@@ -10,11 +10,8 @@ do
     shift 2
 done
 
-if ! [ -z "${memory}" ]
-then
-    memory="--mem ${memory}"
-else
-    memory="--mem 8000"
+if [ -z "${memory}" ]
+    memory="8000"
 fi
 
 path_to_protein=${position_files%/*}
@@ -41,7 +38,7 @@ do
     scaffold_part=${scaffold_part%.pos}
     mkdir ${scaffold_part}
     cd ${scaffold_part}
-    slurmit.py --job ${scaffold_part} ${memory} --command "~/Rosetta/main/source/bin/match.default.linuxgccrelease \
+    slurmit.py --job ${scaffold_part} --mem ${memory} --command "~/Rosetta/main/source/bin/match.default.linuxgccrelease \
         @../../../../scripts-match/general_match.flags @../../${ligand}/subs.flags ${params_files} \
         -match:scaffold_active_site_residues_for_geomcsts ../${pos} -s ../../${reference_pdb}"
     cd ..

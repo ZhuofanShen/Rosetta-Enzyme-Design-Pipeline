@@ -34,11 +34,8 @@ else
     decoys="-n "${decoys}
 fi
 
-if ! [ -z "${memory}" ]
-then
-    memory="--mem ${memory}"
-else
-    memory="--mem 2000"
+if [ -z "${memory}" ]
+    memory="2000"
 fi
 
 params_files="-params"
@@ -79,7 +76,7 @@ do
             cd ${variant}
             mkdir design
             cd design
-            slurmit.py --job ${variant} ${memory} --command \
+            slurmit.py --job ${variant} --mem ${memory} --command \
                 "python ../../../../../scripts-design/fast_design.py ../${variant}.pdb \
                 ${params_files} ${symmetry} -sf ref2015_cst \
                 --score_terms fa_intra_rep_nonprotein:0.545 fa_intra_atr_nonprotein:1 \
