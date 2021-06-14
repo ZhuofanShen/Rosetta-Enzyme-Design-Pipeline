@@ -6,7 +6,7 @@ do
         -head) head="$2";; # head threshold, pdb numbering, optional
         -tail) tail="$2";; # tail threshold, pdb numbering, optional
         -lig) ligand="$2";; # i.e. ../../ligands/pAaF/pAaF-product
-        -cst_suffix) cst_suffix="$2";; # optional
+        -dup) duplicated="$2";; # optional
         -nbh) neighborhood="$2";; # optional
         -n) decoys="$2";; # optional
         -mem) memory="$2";;
@@ -15,9 +15,9 @@ do
     shift 2
 done
 
-if ! [ -z "${cst_suffix}" ]
+if ! [ -z "${duplicated}" ]
 then
-    enzdes_cst_suffix=_${cst_suffix}.cst
+    enzdes_cst_suffix=_duplicated.cst
 else
     enzdes_cst_suffix=.cst
 fi
@@ -34,10 +34,12 @@ else
     decoys="-n "${decoys}
 fi
 
-# if ! [ -z "${memory}" ]
-# then
-#     memory="--mem ${memory}"
-# fi
+if ! [ -z "${memory}" ]
+then
+    memory="--mem ${memory}"
+else
+    memory="--mem 2000"
+fi
 
 params_files="-params"
 for params_file in `ls ${ligand}/*.params`
@@ -77,7 +79,7 @@ do
             cd ${variant}
             mkdir design
             cd design
-            slurmit.py --job ${variant} --mem ${memory} --command \
+            slurmit.py --job ${variant} ${memory} --command \
                 "python ../../../../../scripts-design/fast_design.py ../${variant}.pdb \
                 ${params_files} ${symmetry} -sf ref2015_cst \
                 --score_terms fa_intra_rep_nonprotein:0.545 fa_intra_atr_nonprotein:1 \

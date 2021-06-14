@@ -1,0 +1,3 @@
+-extra_res_fa ../../../../ligands/pAaF/pAaF-intermediate/AAF_ligand.params ../../../../ligands/pAaF/pAaF-intermediate/TYZ.params ../../../../ligands/pAaF/pAaF-intermediate/CYX.params
+-match:lig_name AAF
+-match:geometric_constraint_file ../../../../ligands/pAaF/pAaF-intermediate/pAaF-intermediate.cst

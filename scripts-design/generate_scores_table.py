@@ -11,6 +11,7 @@ def parse_arguments():
     parser.add_argument('directory', type=str, help='$scaffold_$substrate')
     parser.add_argument('-s', '--step', type=int, choices=[1, 2], help='step1 or step2')
     parser.add_argument('-dup', '--duplicate', action='store_true', help='Duplicated variant sites in the symmetric chain.')
+    parser.add_argument('-mem', '--memory', type=int, default=2000, help='slurm job memory allocation')
     args = parser.parse_args()
     # scaffold substrate
     scaffold_substrate = args.directory.split('_')
@@ -187,13 +188,13 @@ def write_initial_design_scores(arguments, params_files_py):
         if arguments.duplicate:
             suffix = '_duplicated.cst'
         else:
-            suffix = '_design.cst'
+            suffix = '.cst'
         with open(arguments.directory + '/' + variant + '/manual_design.sh', 'w+') as bash:
             if arguments.symmetry:
                 symmetry_arg = ' -symm ../../../../../proteins/' + arguments.protein + '/' + arguments.symmetry
             else:
                 symmetry_arg = ''
-            bash.write('mkdir manual_design;\ncd manual_design;\nslurmit.py --job ' + variant + 
+            bash.write('mkdir manual_design;\ncd manual_design;\nslurmit.py --job ' + variant + ' --mem ' + str(arguments.memory)
 ' --command "python ../../../../../scripts-design/fast_design.py ../' + variant + '-ligand.pdb' + 
 symmetry_arg + ' -sf ref2015_cst --score_terms fa_intra_rep_nonprotein:0.545 \
 fa_intra_atr_nonprotein:1 ' + params_files_py + '-enzdes_cst ../../../../../ligands/' + 

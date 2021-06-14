@@ -39,7 +39,7 @@ do
     scaffold_part=${scaffold_part%.pos}
     mkdir ${scaffold_part}
     cd ${scaffold_part}
-    slurmit.py --job ${scaffold_part} --mem ${memory} --command "~/Rosetta/main/source/bin/match.default.linuxgccrelease \
+    slurmit.py --time 1:00:00 --job ${scaffold_part} --mem ${memory} --command "~/Rosetta/main/source/bin/match.default.linuxgccrelease \
         @../../../../scripts-match/general_match.flags @../../${ligand}/subs.flags ${params_files} \
         -match:scaffold_active_site_residues_for_geomcsts ../${pos} -s ../../${reference_pdb}"
     cd ..
