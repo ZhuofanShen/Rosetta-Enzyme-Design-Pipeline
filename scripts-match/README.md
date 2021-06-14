@@ -31,9 +31,9 @@ Make staples across chain A and chain B
 > ../../scripts-match/match.sh -pos ../../proteins/CPG2/CPG2-AB -lig ../../ligands/pAaF/pAaF-product -mem 8000
 
 or make staples within chain A
-> ../../scripts-match/match.sh -pos ../../proteins/CPG2/CPG2-A -linker ../../ligands/pAaF/pAaF-intermediate -mem 8000
+> ../../scripts-match/match.sh -pos ../../proteins/CPG2/CPG2-A -lig ../../ligands/pAaF/pAaF-intermediate -mem 8000
 
-> ../../scripts-match/match.sh -pos ../../proteins/CPG2/CPG2-A -linker ../../ligands/pAaF/pAaF-product -mem 8000
+> ../../scripts-match/match.sh -pos ../../proteins/CPG2/CPG2-A -lig ../../ligands/pAaF/pAaF-product -mem 8000
 
 **Convert output CloudPDB files into FastDesign input files**
 
