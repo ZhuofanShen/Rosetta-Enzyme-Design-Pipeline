@@ -26,14 +26,14 @@ CPG2-A_1 CPG2-A_2 CPG2-A_3
 > cd CPG2_pAaF
 
 Make staples across chain A and chain B
-> ../../scripts-match/match.sh -pos ../CPG2/CPG2-AB -lig ../pAaF/pAaF-intermediate -mem 8000 // memory is 8000 by default
+> ../../scripts-match/match.sh -pos ../../proteins/CPG2/CPG2-AB -lig ../../ligands/pAaF/pAaF-intermediate -mem 8000 // memory is 8000 by default
 
-> ../../scripts-match/match.sh -pos ../CPG2/CPG2-AB -lig ../pAaF/pAaF-product -mem 8000
+> ../../scripts-match/match.sh -pos ../../proteins/CPG2/CPG2-AB -lig ../../ligands/pAaF/pAaF-product -mem 8000
 
 or make staples within chain A
-> ../../scripts-match/match.sh -pos ../CPG2/CPG2-A -linker ../pAaF/pAaF-intermediate -mem 8000
+> ../../scripts-match/match.sh -pos ../../proteins/CPG2/CPG2-A -linker ../../ligands/pAaF/pAaF-intermediate -mem 8000
 
-> ../../scripts-match/match.sh -pos ../CPG2/CPG2-A -linker ../pAaF/pAaF-product -mem 8000
+> ../../scripts-match/match.sh -pos ../../proteins/CPG2/CPG2-A -linker ../../ligands/pAaF/pAaF-product -mem 8000
 
 **Convert output CloudPDB files into FastDesign input files**
 
@@ -51,10 +51,10 @@ Make sure that the Anaconda3 has initialized each time you login your Amarel acc
 > conda install -c schrodinger pymol
 
 Make staples across chain A and chain B
-> ../../scripts-match/generate_fast_design_input.sh -pos ../CPG2/CPG2-AB -dup true -symm true
+> ../../scripts-match/generate_fast_design_input.sh -pos ../../proteins/CPG2/CPG2-AB -dup true -symm true
 
 or make staples within chain A
-> ../../scripts-match/generate_fast_design_input.sh -pos ../CPG2/CPG2-A -symm true
+> ../../scripts-match/generate_fast_design_input.sh -pos ../../proteins/CPG2/CPG2-A -symm true
 
 Unload Anaconda
 > conda deactivate
