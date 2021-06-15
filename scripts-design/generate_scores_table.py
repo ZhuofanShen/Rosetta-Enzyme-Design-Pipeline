@@ -194,7 +194,7 @@ def write_initial_design_scores(arguments, params_files_py):
                 symmetry_arg = ' -symm ../../../../../proteins/' + arguments.protein + '/' + arguments.symmetry
             else:
                 symmetry_arg = ''
-            bash.write('mkdir manual_design;\ncd manual_design;\nslurmit.py --job ' + variant + ' --mem ' + str(arguments.memory)
+            bash.write('mkdir manual_design;\ncd manual_design;\nslurmit.py --job ' + variant + ' --mem ' + str(arguments.memory) + 
 ' --command "python ../../../../../scripts-design/fast_design.py ../' + variant + '-ligand.pdb' + 
 symmetry_arg + ' -sf ref2015_cst --score_terms fa_intra_rep_nonprotein:0.545 \
 fa_intra_atr_nonprotein:1 ' + params_files_py + '-enzdes_cst ../../../../../ligands/' + 
