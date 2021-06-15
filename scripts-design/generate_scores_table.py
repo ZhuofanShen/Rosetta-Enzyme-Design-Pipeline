@@ -142,7 +142,7 @@ def read_match_res_scores(path_to_best_decoy):
         for line in pdb:
             if line[3:7] == ':MP-' and line[:3] not in match_res_score:
                 scores = line.split(' ')
-                match_res_score[line[:3]] = (str(float(scores[-1]) - float(scores[-13])), scores[-14], scores[-12], scores[-11])
+                match_res_score[line[:3]] = (str(float(scores[-1]) - float(scores[-2]) - float(scores[-13])), scores[-14], scores[-12], scores[-11])
         return match_res_score
 
 def write_initial_design_scores(arguments, params_files_py):
