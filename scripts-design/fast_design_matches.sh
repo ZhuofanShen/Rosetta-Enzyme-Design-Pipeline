@@ -72,7 +72,10 @@ do
         x=${variant%Z*}
         x_index=${x:1}
         z_index=${variant#*Z}
-        if ! [ -z "${head}" ] && ! [ -z "${tail}" ] && ( ( [ ${x_index} -lt ${head} ] && [ ${z_index} -gt ${tail} ] ) || ( [ ${z_index} -lt ${head} ] && [ ${x_index} -gt ${tail} ] ) )
+        if ( [ -z "${head}" ] && [ -z "${tail}" ] ) || \
+                ( ! [ -z "${head}" ] && ! [ -z "${tail}" ] && \
+                ( ( [ ${x_index} -lt ${head} ] && [ ${z_index} -gt ${tail} ] ) || \
+                ( [ ${z_index} -lt ${head} ] && [ ${x_index} -gt ${tail} ] ) ) )
         then
             cd ${variant}
             mkdir design
