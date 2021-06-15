@@ -174,7 +174,7 @@ def write_initial_design_scores(arguments, params_files_py):
         manual_design_sheet.write(row, 0, arguments.scaffold + '_' + '_'.join(design_pdb_numbering))
         match_res_scores = read_match_res_scores(arguments.directory + '/' + variant + '/design/' + best_decoy)
         col = 3
-        for match_res in sorted(match_res_scores, key=match_res_scores.get):
+        for match_res in sorted(match_res_scores.keys()):
             for match_res_score_term in match_res_scores[match_res]:
                 initial_design_sheet.write(row, col, match_res_score_term)
                 col += 1
@@ -237,7 +237,7 @@ def get_relaxed_design_scores(arguments):
         design_sheet.write(row, 2, best_decoy.split("_")[-1][:-4])
         match_res_scores = read_match_res_scores(arguments.directory + '/' + variant + '/manual_design/' + best_decoy)
         col = 3
-        for match_res in sorted(match_res_scores, key=match_res_scores.get):
+        for match_res in sorted(match_res_scores.keys()):
             for match_res_score_term in match_res_scores[match_res]:
                 design_sheet.write(row, col, match_res_score_term)
                 col += 1
