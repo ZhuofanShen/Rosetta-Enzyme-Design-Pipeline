@@ -218,8 +218,8 @@ def get_relaxed_design_scores(arguments):
     design_sheet = workbook_write.get_sheet(2) # step
     # get the reference sequence
     for ligand_params in filter(lambda x: x.endswith('_ligand.params'), os.listdir('../../ligands/' + args.ligand + '/' + args.substrate)):
-        ligand_res_name = ligand_params.trim('_ligand.params')
-    ref_pose = pose_from_pdb('../' + arguments.protein + '/' + arguments.pdb)
+        ligand_res_name = ligand_params.strip('_ligand.params')
+    ref_pose = pose_from_pdb('../../proteins/' + arguments.protein + '/' + arguments.pdb)
     initial_ref_seq, ref_annotation_dict = read_annotated_sequence(ref_pose.annotated_sequence(), arguments.symmetry)
     # iterate through all designs
     for row in range(directory_sheet.nrows):
