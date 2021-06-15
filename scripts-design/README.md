@@ -2,10 +2,20 @@
 
 Execute this command in a terminal on your local computer.
 Make staples across chain A and chain B
-> python sftp_best_decoys.py /home/NetID/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-AB_pAaF-product -u NetID -p password -s 0
+> mkdir CPG2-AB_pAaF-product
+
+> cd CPG2-AB_pAaF-product
+
+Download CPG2-AB_pAaF-product.xls to the current directory, and then
+> python /path/to/sftp_best_decoys.py /path/to/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-AB_pAaF-product -u NetID -p password -s 0
 
 or make staples within chain A
-> python sftp_best_decoys.py /home/NetID/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-A_pAaF-product -u NetID -p password -s 0
+> mkdir CPG2-A_pAaF-product
+
+> cd CPG2-A_pAaF-product
+
+Download CPG2-A_pAaF-product.xls to the current directory, and then
+> python /path/to/sftp_best_decoys.py /path/to/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-A_pAaF-product -u NetID -p password -s 0
 
 **Run FastDesign**
 
@@ -31,10 +41,12 @@ or make staples within chain A
 
 Execute this command in a terminal on your computer.
 Make staples across chain A and chain B
-> python sftp_best_decoys.py /home/NetID/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-AB_pAaF-product -u NetID -p password -s 1
+Make sure CPG2-AB_pAaF-product.xls is in the current directory, and then
+> python /path/to/sftp_best_decoys.py /path/to/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-AB_pAaF-product -u NetID -p password -s 1
 
 or make staples within chain A
-> python sftp_best_decoys.py /home/NetID/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-A_pAaF-product -u NetID -p password -s 1
+Make sure CPG2-A_pAaF-product.xls is in the current directory, and then
+> python /path/to/sftp_best_decoys.py /path/to/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-A_pAaF-product -u NetID -p password -s 1
 
 **Take a look of the Rosetta-designed models, manually revert those irrelevant mutations.**
 
@@ -59,7 +71,9 @@ or make staples within chain A
 
 Execute this command in a terminal on your computer.
 Make staples across chain A and chain B
-> python sftp_best_decoys.py /home/NetID/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-AB_pAaF-product -u NetID -p password -s 2
+Update the file CPG2-AB_pAaF-product.xls in the current directory, and then
+> python /path/to/sftp_best_decoys.py /path/to/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-AB_pAaF-product -u NetID -p password -s 2
 
 or make staples within chain A
-> python sftp_best_decoys.py /home/NetID/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-A_pAaF-product -u NetID -p password -s 2
+Update the file CPG2-A_pAaF-product.xls in the current directory, and then
+> python /path/to/sftp_best_decoys.py /path/to/RosettaMatch-FastDesign-Pipeline/designs/CPG2_pAaF/CPG2-A_pAaF-product -u NetID -p password -s 2
