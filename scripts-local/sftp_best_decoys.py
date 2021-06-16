@@ -34,10 +34,10 @@ for row in range(0, directory_sheet.nrows):
         os.mkdir(variant)
     if args.step == 0:
         sftp_client.get(args.directory + '/' + variant + '/' + variant + '.pdb', variant + '/' + variant + '.pdb')
-        try:
-            sftp_client.get(args.directory + '/' + variant + '/' + variant + '-ligand.pdb', variant + '/' + variant + '-ligand.pdb')
-        except:
-            pass
+        stdin, stdout, stderr = ssh_client.exec_command('ls ' + args.directory + '/' + variant + '/*.rotlib.pdb')
+        rotlib_full_path = stdout.readlines()[0][:-1]
+        rotlib = rotlib_full_path.split('/')[-1]
+        sftp_client.get(rotlib_full_path, variant + '/' + rotlib)
     else:
         try:
             design = design_sheet.cell_value(row, 0)
@@ -49,10 +49,10 @@ for row in range(0, directory_sheet.nrows):
         if num == '':
             print(variant + ' has not been designed yet.')
             continue
-        print('(' + str(row) + ', 1): ' + str(int(num)))
+        print(str(row) + ': ' + str(int(num)))
         stdin, stdout, stderr = ssh_client.exec_command('ls ' + args.directory + '/' + variant + '/' + directory + '/*_' + str(int(num)) + '.pdb')
-        best_decoy_full_name = stdout.readlines()[0][:-1]
-        sftp_client.get(best_decoy_full_name, variant + '/' + variant + '_' + directory + '.pdb')
+        best_decoy_full_path = stdout.readlines()[0][:-1]
+        sftp_client.get(best_decoy_full_path, variant + '/' + variant + '_' + directory + '.pdb')
         if args.step == 1:
             sftp_client.get(args.directory + '/' + variant + '/pymol.txt', variant + '/pymol.txt')
 
