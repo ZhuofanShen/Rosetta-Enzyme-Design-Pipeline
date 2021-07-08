@@ -8,7 +8,7 @@ def load_matches(directories):
     for directory in directories:
         if scaffold:
             if directory.split('_')[0] != scaffold:
-                raise Exception:
+                raise Exception(directory + ' and ' + scaffold + ' do not match!')
         else:
             scaffold = directory.split('_')[0]
         match_set = set()
@@ -49,6 +49,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('directories', type=str, nargs='*')
     args = parser.parse_args()
-    state_matches = load_matches(args.directories)
+    state_matches, scaffold = load_matches(args.directories)
     merge_states(state_matches)
     intersection(state_matches, scaffold)
