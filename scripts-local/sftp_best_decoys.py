@@ -45,14 +45,19 @@ for row in range(0, directory_sheet.nrows):
         except IndexError:
             print(variant + ' has not been designed yet.')
             continue
-        num = design_sheet.cell_value(row, 2)
+        num = design_sheet.cell_value(row, 3)
         if num == '':
             print(variant + ' has not been designed yet.')
             continue
         print(str(row) + ': ' + str(int(num)))
         stdin, stdout, stderr = ssh_client.exec_command('ls ' + args.directory + '/' + variant + '/' + directory + '/*_' + str(int(num)) + '.pdb')
-        best_decoy_full_path = stdout.readlines()[0][:-1]
-        sftp_client.get(best_decoy_full_path, variant + '/' + variant + '_' + directory + '.pdb')
+        out = stdout.readlines()
+        if len(out) > 0:
+            best_decoy_full_path = out[0][:-1]
+            sftp_client.get(best_decoy_full_path, variant + '/' + variant + '_' + directory + '.pdb')
+        else:
+            sftp_client.get(args.directory + '/' + variant + '/' + variant + '_' + directory + '.pdb', variant + '/' + variant + '_' + directory + '.pdb')
+        sftp_client.get(args.directory + '/' + variant + '/' + variant + '.pse', variant + '/' + variant + '.pse')
         if args.step == 1:
             sftp_client.get(args.directory + '/' + variant + '/pymol.txt', variant + '/pymol.txt')
 
