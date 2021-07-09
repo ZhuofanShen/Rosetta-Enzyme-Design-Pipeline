@@ -80,6 +80,7 @@ def read_annotated_sequence(annotated_sequence, symmetric):
                 if symmetric and ':NtermProteinFull' in annotated_sequence[begin_index + 1:index]:
                     n_term += 1
                     if n_term == 2:
+                        sequence = sequence[:-1]
                         break
                 annotation_dict.update({str(index - index_diff): annotated_sequence[begin_index + 1:index]})
                 is_annotation = False
@@ -90,7 +91,7 @@ def read_annotated_sequence(annotated_sequence, symmetric):
                 is_annotation = True
             else:
                 sequence += annotated_sequence[index]
-    return sequence[:-1], annotation_dict
+    return sequence, annotation_dict
 
 def insert_ligand_residue_into_reference_sequence(reference_sequence, sequence, annotation_dict, ligand_res_name):
     ligand_pose_indexes = list()
