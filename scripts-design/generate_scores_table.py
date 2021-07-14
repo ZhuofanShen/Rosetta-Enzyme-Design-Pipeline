@@ -210,21 +210,16 @@ suffix + muts_arg + ' -nbh 8.0 -n 50;"\ncd ..;\n')
         pymol.write('show sticks, resi ' + '+'.join(mutation[2:-1] for mutation in design_pdb_numbering) + '; hide (h.);')
 
 def generate_pymol_session(arguments, variant, design_pdb_numbering, step):
+    cmd.load('../../proteins/' + arguments.protein + '/' + arguments.pdb)
     if step == 1:
-        cmd.delete(arguments.pdb[:-4])
-        cmd.load('../../proteins/' + arguments.protein + '/' + arguments.pdb)
-        cmd.delete(variant + '_design')
         cmd.load(arguments.directory + '/' + variant + '/' + variant + '_design.pdb')
-        cmd.show(representation="sticks", selection="resi " + '+'.join(mutation[2:-1] for mutation in design_pdb_numbering))
-        cmd.save(arguments.directory + '/' + variant + '/' + variant + '.pse', format='pse')
-        cmd.delete('*')
     elif step == 2:
-        cmd.load(arguments.directory + '/' + variant + '/' + variant + '.pse', format='pse')
-        cmd.delete(variant + '_manual_design')
+        if os.path.isfile(arguments.directory + '/' + variant + '/' + variant + '_design.pdb'):
+            cmd.load(arguments.directory + '/' + variant + '/' + variant + '_design.pdb')
         cmd.load(arguments.directory + '/' + variant + '/' + variant + '_manual_design.pdb')
-        cmd.show(representation="sticks", selection="resi " + '+'.join(mutation[2:-1] for mutation in design_pdb_numbering))
-        cmd.save(arguments.directory + '/' + variant + '/' + variant + '.pse', format='pse')
-        cmd.delete('*')
+    cmd.show(representation="sticks", selection="resi " + '+'.join(mutation[2:-1] for mutation in design_pdb_numbering))
+    cmd.save(arguments.directory + '/' + variant + '/' + variant + '.pse', format='pse')
+    cmd.delete('*')
 
 def write_initial_design_scores(arguments, params_files_py):
     # create a new xls workbook
