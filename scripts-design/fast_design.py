@@ -51,7 +51,7 @@ def parse_arguments():
     parser.add_argument('-subs', '--substrates', type=int, nargs='*')
     parser.add_argument('-enzdes', '--enzyme_design', action='store_true')
     parser.add_argument('-n', '--decoys', type=int, default=50)
-    parser.add_argument('-rmsd', type=int, nargs='*', default=list())
+    parser.add_argument('-rmsd', type=int, nargs='*', default=None)
     parser.add_argument('--annotated_name', action='store_true')
     parser.add_argument('-debug', '--debug_mode', action='store_true')
     args = parser.parse_args()
