@@ -41,15 +41,16 @@ def parse_arguments():
     parser.add_argument('--score_terms', type=str, nargs='*', default=list())
     parser.add_argument('-symm', '--symmetry', type=str)
     parser.add_argument('-cst', '--constraints', type=str)
-    parser.add_argument('-enzdes_cst', '--enzyme_design_constraints', type=str)
     parser.add_argument('-nbh', '--neighborhood', type=float, default=0)
+    parser.add_argument('-relax', '--fast_relax', action='store_true')
     parser.add_argument('-muts', '--mutations', type=str, nargs='*', default=list())
     parser.add_argument('-nataa', '--favor_native_residue', type=float)
+    parser.add_argument('-des', '--designable_sites', type=int, nargs='*')
+    parser.add_argument('-enzdes_cst', '--enzyme_design_constraints', type=str)
+    parser.add_argument('-subs', '--substrates', type=int, nargs='*')
     parser.add_argument('-no_cys', '--cystine', action='store_false')
     parser.add_argument('-ncaa', '--noncanonical_amino_acids', type=str, nargs='*', default=list(), help='name3')
-    parser.add_argument('-des', '--designable_sites', type=int, nargs='*')
-    parser.add_argument('-subs', '--substrates', type=int, nargs='*')
-    parser.add_argument('-enzdes', '--enzyme_design', action='store_true')
+    parser.add_argument('-xform', '--substrate_rigid_body_transformations', type=bool, default=True)
     parser.add_argument('-n', '--decoys', type=int, default=50)
     parser.add_argument('-rmsd', type=int, nargs='*', default=None)
     parser.add_argument('--annotated_name', action='store_true')
@@ -123,7 +124,7 @@ def create_enzdes_cst():
     enz_cst.set_cst_action(ADD_NEW)
     return enz_cst
 
-def create_relax_task_factory(point_mutations: list = list(), enzyme_core_indexes: list = list(), neighborhood: float = 0):
+def create_relax_task_factory(point_mutations: list = list(), active_site_positions: list = list(), neighborhood: float = 0):
     task_factory = TaskFactory()
     task_factory.push_back(IncludeCurrent())
     repack = RestrictToRepackingRLT()
@@ -140,9 +141,9 @@ def create_relax_task_factory(point_mutations: list = list(), enzyme_core_indexe
             mutated_selector.add_residue_selector(point_mutation_selector)
         # Repack and static
         if neighborhood > 0:
-            if len(enzyme_core_indexes) > 0:
+            if len(active_site_positions) > 0:
                 # Repack
-                enzyme_core_selector = ResidueIndexSelector(','.join(str(enzyme_core_index) for enzyme_core_index in enzyme_core_indexes))
+                enzyme_core_selector = ResidueIndexSelector(','.join(str(active_site_position) for active_site_position in active_site_positions))
                 designable_repacking_selector = NeighborhoodResidueSelector()
                 designable_repacking_selector.set_focus_selector(OrResidueSelector(mutated_selector, enzyme_core_selector))
                 designable_repacking_selector.set_distance(neighborhood)
@@ -166,9 +167,9 @@ def create_relax_task_factory(point_mutations: list = list(), enzyme_core_indexe
             task_factory.push_back(OperateOnResidueSubset(repack, mutated_selector, True))
     else:
         if neighborhood > 0:
-            if len(enzyme_core_indexes) > 0:
+            if len(active_site_positions) > 0:
                 # Repack
-                enzyme_core_selector = ResidueIndexSelector(','.join(str(enzyme_core_index) for enzyme_core_index in enzyme_core_indexes))
+                enzyme_core_selector = ResidueIndexSelector(','.join(str(active_site_position) for active_site_position in active_site_positions))
                 repacking_selector = NeighborhoodResidueSelector()
                 repacking_selector.set_focus_selector(enzyme_core_selector)
                 repacking_selector.set_distance(neighborhood)
@@ -184,7 +185,7 @@ def create_relax_task_factory(point_mutations: list = list(), enzyme_core_indexe
             task_factory.push_back(RestrictToRepacking())
     return task_factory
 
-def create_design_task_factory(designable_res_indexes: list, enzdes_cst_indexes: list = list(), \
+def create_design_task_factory(designable_res_indexes: list, active_site_positions: list = list(), \
         neighborhood: float = 0, cystine: bool = True, noncanonical_amino_acids: list = list()):
     task_factory = TaskFactory()
     if len(noncanonical_amino_acids) > 0:
@@ -203,8 +204,8 @@ def create_design_task_factory(designable_res_indexes: list, enzdes_cst_indexes:
     repack = RestrictToRepackingRLT()
     prevent = PreventRepackingRLT()
     if neighborhood > 0:
-        if len(enzdes_cst_indexes) > 0:
-            enzdes_cst_selector = ResidueIndexSelector(','.join(str(enzdes_cst_index) for enzdes_cst_index in enzdes_cst_indexes))
+        if len(active_site_positions) > 0:
+            enzdes_cst_selector = ResidueIndexSelector(','.join(str(enzdes_cst_index) for enzdes_cst_index in active_site_positions))
             designable_repacking_selector = NeighborhoodResidueSelector()
             designable_repacking_selector.set_focus_selector(OrResidueSelector(designable_selector, enzdes_cst_selector))
             designable_repacking_selector.set_distance(neighborhood)
@@ -224,7 +225,7 @@ def create_design_task_factory(designable_res_indexes: list, enzdes_cst_indexes:
         task_factory.push_back(OperateOnResidueSubset(repack, designable_selector, True))
     return task_factory
 
-def create_enzyme_design_task_factory(enzyme_core_indexes: list, neighborhood: float = 0, \
+def create_enzyme_design_task_factory(active_site_positions: list, neighborhood: float = 0, \
         cystine: bool = True, noncanonical_amino_acids: list = list()):
     task_factory = TaskFactory()
     if len(noncanonical_amino_acids) > 0:
@@ -234,7 +235,7 @@ def create_enzyme_design_task_factory(enzyme_core_indexes: list, neighborhood: f
         task_factory.set_packer_palette(ncaa_palette)
     task_factory.push_back(IncludeCurrent())
     # Mutatable
-    enzyme_core_selector = ResidueIndexSelector(','.join(str(enzyme_core_index) for enzyme_core_index in enzyme_core_indexes))
+    enzyme_core_selector = ResidueIndexSelector(','.join(str(active_site_position) for active_site_position in active_site_positions))
     interface_selector = InterGroupInterfaceByVectorSelector()
     interface_selector.group1_selector(enzyme_core_selector)
     interface_selector.group2_selector(NotResidueSelector(enzyme_core_selector))
@@ -330,14 +331,15 @@ if __name__ == "__main__":
     for score_term in args.score_terms:
         term_weight = score_term.split(':')
         exec("sfxn.set_weight(ScoreType.{}, {})".format(term_weight[0], term_weight[1]))
-    # get pose index of the linkers
+    # get pose index of the substrate and catalytic residues
+    active_site_positions = set()
     if args.enzyme_design_constraints:
         pdb_info = pose.pdb_info()
         match_substrate_pose_indexes, match_res_pose_indexes = get_match_pose_indexes(pdb_info, args.pdb, args.symmetry)
-        match_indexes_int = match_substrate_pose_indexes.union(match_res_pose_indexes)
-        match_indexes = set(str(match_index_int) for match_index_int in match_indexes_int)
-    else:
-        match_indexes = list()
+        match_indexes = match_substrate_pose_indexes.union(match_res_pose_indexes)
+        active_site_positions.update(match_index for match_index in match_indexes)
+    if args.substrates:
+        active_site_positions.update(args.substrates)
     # coordinate constraint
     if args.reference_pose:
         coord_cst_gen = create_coord_cst(ref_pose = ref_pose)#, ligand_res_indexes=match_substrate_pose_indexes)
@@ -360,24 +362,26 @@ if __name__ == "__main__":
     else:
         rmsdm = RMSDMetric(pose, ResidueIndexSelector(','.join(str(res) for res in args.rmsd)))
     movers.append(rmsdm)
-    if args.designable_sites or args.substrates or args.enzyme_design:
+    if args.fast_relax:
+        tf = create_relax_task_factory(point_mutations = args.mutations, active_site_positions = active_site_positions, \
+                neighborhood = args.neighborhood)
+    elif args.designable_sites or args.substrates or args.enzyme_design_constaints:
         if args.favor_native_residue:
             favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
         if args.designable_sites:
-            tf = create_design_task_factory(args.designable_sites, enzdes_cst_indexes = match_indexes, \
+            tf = create_design_task_factory(args.designable_sites, active_site_positions = active_site_positions, \
                     neighborhood = args.neighborhood, cystine = args.cystine, noncanonical_amino_acids = args.noncanonical_amino_acids)
-        elif args.substrates:
-            tf = create_enzyme_design_task_factory(args.substrates, neighborhood = args.neighborhood, \
-                    cystine = args.cystine, noncanonical_amino_acids = args.noncanonical_amino_acids)
-        elif args.enzyme_design:
-            tf = create_enzyme_design_task_factory(match_indexes, neighborhood = args.neighborhood, \
+        else:
+            tf = create_enzyme_design_task_factory(active_site_positions, neighborhood = args.neighborhood, \
                     cystine = args.cystine, noncanonical_amino_acids = args.noncanonical_amino_acids)
     else:
-        tf = create_relax_task_factory(point_mutations = args.mutations, enzyme_core_indexes = match_indexes, \
-                neighborhood = args.neighborhood)
-    # If the substrate is movable (under development)
-    if args.enzyme_design_constraints:
-        mm = create_move_map(pose, ligand_res_indexes = match_substrate_pose_indexes)
+        tf = create_relax_task_factory(point_mutations = args.mutations, neighborhood = args.neighborhood)
+    # If the substrate is allowed to perform rigid body transformations (under development)
+    if args.substrate_rigid_body_transformations:
+        if args.substrates:
+            mm = create_move_map(pose, ligand_res_indexes = args.substrates)
+        elif args.enzyme_design_constraints:
+            mm = create_move_map(pose, ligand_res_indexes = match_substrate_pose_indexes)
         fr = create_fast_relax_mover(sfxn, tf, move_map = mm)
     else:
         fr = create_fast_relax_mover(sfxn, tf)
