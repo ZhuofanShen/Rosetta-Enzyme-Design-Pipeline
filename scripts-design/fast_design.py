@@ -50,7 +50,7 @@ def parse_arguments():
     parser.add_argument('-subs', '--substrates', type=int, nargs='*')
     parser.add_argument('-no_cys', '--cystine', action='store_false')
     parser.add_argument('-ncaa', '--noncanonical_amino_acids', type=str, nargs='*', default=list(), help='name3')
-    parser.add_argument('-xform', '--substrate_rigid_body_transformations', type=bool, default=True)
+    parser.add_argument('-xform', '--substrate_rigid_body_transformations', type=bool, default=False)
     parser.add_argument('-n', '--decoys', type=int, default=50)
     parser.add_argument('-rmsd', type=int, nargs='*', default=None)
     parser.add_argument('--annotated_name', action='store_true')
@@ -365,7 +365,7 @@ if __name__ == "__main__":
     if args.fast_relax:
         tf = create_relax_task_factory(point_mutations = args.mutations, active_site_positions = active_site_positions, \
                 neighborhood = args.neighborhood)
-    elif args.designable_sites or args.substrates or args.enzyme_design_constaints:
+    elif args.designable_sites or args.substrates or args.enzyme_design_constraints:
         if args.favor_native_residue:
             favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
         if args.designable_sites:
