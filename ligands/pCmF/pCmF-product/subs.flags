@@ -1,0 +1,3 @@
+-extra_res_fa ../../../../ligands/pCmF/pCmF-product/CMF_ligand.params ../../../../ligands/pCmF/pCmF-product/TYZ.params ../../../../ligands/pCmF/pCmF-product/CYX.params
+-match:lig_name CMF
+-match:geometric_constraint_file ../../../../ligands/pCmF/pCmF-product/pCmF-product.cst
