@@ -1,0 +1,39 @@
+CST::BEGIN
+  TEMPLATE::  ATOM_MAP: 1 atom_name: CCl CV SV
+  TEMPLATE::  ATOM_MAP: 1 residue3: CMF
+
+  TEMPLATE::  ATOM_MAP: 2 atom_name: SG CB CA
+  TEMPLATE::  ATOM_MAP: 2 residue3: CYX
+
+  CONSTRAINT::  distanceAB:  1.81    0.05   50.0     1      0
+  CONSTRAINT::     angle_A: 115.0     3.0   50.0    360.0   0
+  CONSTRAINT::     angle_B: 101.0     3.0   50.0    360.0   0
+  CONSTRAINT::   torsion_A:   0.0   175.0    0.0    360.0  11
+  CONSTRAINT::   torsion_B: 180.0    50.0   10.0    120.0   5
+  CONSTRAINT::  torsion_AB: 180.0    50.0   10.0    120.0   5
+  ALGORITHM_INFO:: match
+    CHI_STRATEGY:: CHI 1 EX_TWO_HALF_STEP_STDDEVS
+    CHI_STRATEGY:: CHI 2 EX_TWO_HALF_STEP_STDDEVS
+      IGNORE_UPSTREAM_PROTON_CHI
+  ALGORITHM_INFO::END
+CST::END
+
+CST::BEGIN
+  TEMPLATE::  ATOM_MAP: 1 atom_name: CCl SV CV
+  TEMPLATE::  ATOM_MAP: 1 residue3: CMF
+
+  TEMPLATE::  ATOM_MAP: 2 atom_name: CZ CE1 CD1
+  TEMPLATE::  ATOM_MAP: 2 residue3: TYZ
+
+  CONSTRAINT::  distanceAB:  1.50    0.05   50.0     1      0
+  CONSTRAINT::     angle_A: 115.0     3.0   50.0    360.0   0
+  CONSTRAINT::     angle_B: 120.0     3.0   50.0    360.0   0
+  CONSTRAINT::   torsion_A:   0.0   175.0    0.0    360.0  11
+  CONSTRAINT::   torsion_B: 180.0     3.0   50.0    360.0   0
+  CONSTRAINT::  torsion_AB:  90.0    55.0   10.0    180.0   5
+  ALGORITHM_INFO:: match
+    CHI_STRATEGY:: CHI 1 EX_TWO_HALF_STEP_STDDEVS
+    CHI_STRATEGY:: CHI 2 EX_TWO_HALF_STEP_STDDEVS
+      IGNORE_UPSTREAM_PROTON_CHI
+  ALGORITHM_INFO::END
+CST::END
