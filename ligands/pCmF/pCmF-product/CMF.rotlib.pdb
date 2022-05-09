@@ -1,0 +1,7 @@
+REMARK   1
+HETATM    1  CV  CMF     0       1.050   2.713   0.198                       C
+HETATM    2  CCl CMF     0       1.084   4.319  -0.607                       C
+HETATM    3  SV  CMF     0       0.290   4.377  -2.232                       S
+HETATM    4 1HC  CMF     0       0.499   4.980  -0.002                       H
+HETATM    5 2HC  CMF     0       2.111   4.543  -0.805                       H
+END
