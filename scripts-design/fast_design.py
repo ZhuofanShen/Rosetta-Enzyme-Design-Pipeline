@@ -22,7 +22,7 @@ from pyrosetta.rosetta.core.simple_metrics.metrics import \
 from pyrosetta.rosetta.protocols.constraint_generator import \
     AddConstraints, CoordinateConstraintGenerator
 from pyrosetta.rosetta.protocols.enzdes import ADD_NEW, \
-    AddOrRemoveMatchCsts, DetectProteinLigandInterface
+    AddOrRemoveMatchCsts
 from pyrosetta.rosetta.protocols.protein_interface_design \
     import FavorNativeResidue
 from pyrosetta.rosetta.protocols.minimization_packing import \
@@ -59,7 +59,7 @@ def parse_arguments():
     return args
 
 def init_pyrosetta_with_opts(args):
-    opts = '-ex1 -ex2 -ignore_zero_occupancy false -use_input_sc -no_optH false -flip_HNQ'# -nblist_autoupdate
+    opts = '-ex1 -ex2 -ignore_zero_occupancy false -use_input_sc -no_optH false -flip_HNQ'
     if args.score_function.startswith('beta_nov16'):
         opts += ' -corrections::beta_nov16'
     if args.parameters_files:
@@ -109,13 +109,13 @@ def get_match_pose_indexes(info, pdb, symmetry):
                 break
     return match_substrate_pose_indexes, match_res_pose_indexes
 
-def create_coord_cst(ref_pose=None, free_res_indexes=None):
+def create_coord_cst(ref_pose=None, no_coord_cst=None):
     coord_cst_gen = CoordinateConstraintGenerator()
     if ref_pose:
         coord_cst_gen.set_reference_pose(ref_pose)
-    if free_res_indexes:
-        free_res_selector = ResidueIndexSelector(','.join(str(free_res_index) for free_res_index in free_res_indexes))
-        coord_cst_gen.set_residue_selector(NotResidueSelector(free_res_selector))
+    if no_coord_cst:
+        no_coord_cst_selector = ResidueIndexSelector(','.join(str(no_coord_cst_res) for no_coord_cst_res in no_coord_cst))
+        coord_cst_gen.set_residue_selector(NotResidueSelector(no_coord_cst_selector))
     return coord_cst_gen
 
 def create_enzdes_cst():
@@ -198,7 +198,7 @@ def create_design_task_factory(designable_res_indexes: list, active_site_positio
     designable_selector = ResidueIndexSelector(','.join(str(designable_res_index) for designable_res_index in designable_res_indexes))
     if not cystine:
         restriction = RestrictAbsentCanonicalAASRLT()
-        restriction.aas_to_keep('AGILPVFWYDERHKSTMNQ') # AGILPVFWYDERHKSTCMNQ
+        restriction.aas_to_keep('AGILPVFWYDERHKSTCMNQ')
         task_factory.push_back(OperateOnResidueSubset(restriction, designable_selector))
     # Repack
     repack = RestrictToRepackingRLT()
@@ -242,7 +242,7 @@ def create_enzyme_design_task_factory(active_site_positions: list, neighborhood:
     designable_selector = AndResidueSelector(interface_selector, NotResidueSelector(enzyme_core_selector))
     if not cystine:
         restriction = RestrictAbsentCanonicalAASRLT()
-        restriction.aas_to_keep('AGILPVFWYDERHKSTMNQ') # AGILPVFWYDERHKSTCMNQ
+        restriction.aas_to_keep('AGILPVFWYDERHKSTCMNQ')
         task_factory.push_back(OperateOnResidueSubset(restriction, designable_selector))
     # Repack
     repack = RestrictToRepackingRLT()
@@ -342,9 +342,9 @@ if __name__ == "__main__":
         active_site_positions.update(args.substrates)
     # coordinate constraint
     if args.reference_pose:
-        coord_cst_gen = create_coord_cst(ref_pose = ref_pose)#, ligand_res_indexes=match_substrate_pose_indexes)
+        coord_cst_gen = create_coord_cst(ref_pose = ref_pose)
     else:
-        coord_cst_gen = create_coord_cst()#ligand_res_indexes=match_substrate_pose_indexes)
+        coord_cst_gen = create_coord_cst()
     add_csts = AddConstraints()
     add_csts.add_generator(coord_cst_gen)
     add_csts.apply(pose)
