@@ -156,8 +156,8 @@ def create_task_factory(point_mutations: list = None, design_positions: list = N
         # Find protein-theozyme interface design positions
         if design_active_site:
             theozyme_protein_interface_selection = InterGroupInterfaceByVectorSelector()
-            theozyme_protein_interface_selection.group1_selection(theozyme_selection)
-            theozyme_protein_interface_selection.group2_selection(NotResidueSelector(theozyme_selection))
+            theozyme_protein_interface_selection.group1_selector(theozyme_selection)
+            theozyme_protein_interface_selection.group2_selector(NotResidueSelector(theozyme_selection))
             protein_interface_selection = AndResidueSelector(theozyme_protein_interface_selection, \
                     NotResidueSelector(theozyme_selection))
             if point_mutations:
@@ -176,13 +176,13 @@ def create_task_factory(point_mutations: list = None, design_positions: list = N
         task_factory.push_back(OperateOnResidueSubset(restriction, design_selection))
     # Repack and static
     if point_mutations or design_positions or theozyme_positions:
-        variable_selection = OrResidueSelector(point_mutations, design_positions)
+        variable_selection = OrResidueSelector(mutation_selection, design_selection)
         focus_selection = OrResidueSelector(variable_selection, theozyme_selection)
         if repacking_range:
             # Repack
             interface_selection = InterGroupInterfaceByVectorSelector()
-            interface_selection.group1_selection(focus_selection)
-            interface_selection.group2_selection(NotResidueSelector(focus_selection))
+            interface_selection.group1_selector(focus_selection)
+            interface_selection.group2_selector(NotResidueSelector(focus_selection))
             repacking_selection = AndResidueSelector(OrResidueSelector(interface_selection, theozyme_selection), \
                     NotResidueSelector(variable_selection))
             task_factory.push_back(OperateOnResidueSubset(repack, repacking_selection))
@@ -312,7 +312,7 @@ if __name__ == "__main__":
     # create task factory
     tf = create_task_factory(point_mutations = args.mutations, design_positions = args.design_positions, \
             theozyme_positions = theozyme_positions, design_active_site = args.design_active_site, \
-            repacking_range = args.only_repack_interface, no_cystine = args.cystine, \
+            repacking_range = args.only_repack_interface, no_cystine = args.no_cystine, \
             noncanonical_amino_acids = args.noncanonical_amino_acids)
     if args.favor_native_residue and (args.design_positions or args.design_active_site):
         favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
