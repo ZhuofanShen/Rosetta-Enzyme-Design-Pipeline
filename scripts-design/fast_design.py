@@ -40,14 +40,14 @@ def parse_arguments():
     parser.add_argument('--score_terms', type=str, nargs='*', default=list())
     parser.add_argument('-symm', '--symmetry', type=str)
     parser.add_argument('-cst', '--constraints', type=str)
-    parser.add_argument('-intf', '--only_repack_interface', action='store_true')
-    parser.add_argument('-relax', '--fast_relax', action='store_true')
+    parser.add_argument('-rpk_intf', '--only_repack_interface', action='store_true')
     parser.add_argument('-muts', '--mutations', type=str, nargs='*', default=list())
     parser.add_argument('-nataa', '--favor_native_residue', type=float)
-    parser.add_argument('-des', '--designable_sites', type=int, nargs='*')
+    parser.add_argument('-des', '--design_positions', type=int, nargs='*')
     parser.add_argument('-enzdes_cst', '--enzyme_design_constraints', type=str)
+    parser.add_argument('--design_active_site', action='store_true')
     parser.add_argument('-subs', '--substrates', type=int, nargs='*')
-    parser.add_argument('-no_cys', '--cystine', action='store_false')
+    parser.add_argument('-no_cys', '--no_cystine', action='store_true')
     parser.add_argument('-ncaa', '--noncanonical_amino_acids', type=str, nargs='*', default=list(), help='name3')
     parser.add_argument('-xform', '--substrate_rigid_body_transformations', type=bool, default=False)
     parser.add_argument('-n', '--decoys', type=int, default=50)
@@ -113,8 +113,8 @@ def create_coord_cst(ref_pose=None, no_coord_cst=None):
     if ref_pose:
         coord_cst_gen.set_reference_pose(ref_pose)
     if no_coord_cst:
-        no_coord_cst_selector = ResidueIndexSelector(','.join(str(no_coord_cst_res) for no_coord_cst_res in no_coord_cst))
-        coord_cst_gen.set_residue_selector(NotResidueSelector(no_coord_cst_selector))
+        no_coord_cst_selection = ResidueIndexSelector(','.join(str(no_coord_cst_res) for no_coord_cst_res in no_coord_cst))
+        coord_cst_gen.set_residue_selection(NotResidueSelector(no_coord_cst_selection))
     return coord_cst_gen
 
 def create_enzdes_cst():
@@ -123,144 +123,87 @@ def create_enzdes_cst():
     enz_cst.set_cst_action(ADD_NEW)
     return enz_cst
 
-def add_noncanonical_amino_acids(task_factory, noncanonical_amino_acids):
-    if len(noncanonical_amino_acids) > 0:
+def create_task_factory(point_mutations: list = None, design_positions: list = None, \
+        theozyme_positions: list = None, design_active_site: bool = False, repacking_range: bool = False, \
+        no_cystine: bool = False, noncanonical_amino_acids: list = None):
+    '''
+    Priority: specified point mutations > specified design positions > theozyme protein interface
+    '''
+    task_factory = TaskFactory()
+    task_factory.push_back(IncludeCurrent())
+    repack = RestrictToRepackingRLT()
+    prevent = PreventRepackingRLT()
+    # Declare point mutations
+    if point_mutations:
+        mutated_position_list = list()
+        for point_mutation in point_mutations:
+            position_aa = point_mutation.split(',')
+            restriction = RestrictAbsentCanonicalAASRLT()
+            restriction.aas_to_keep(position_aa[1])
+            task_factory.push_back(OperateOnResidueSubset(restriction, ResidueIndexSelector(position_aa[0])))
+            mutated_position_list.append(position_aa[0])
+        mutation_selection = ResidueIndexSelector(','.join(mutated_position_list))
+    else:
+        mutation_selection = OrResidueSelector()
+    # Specify design positions
+    if design_positions:
+        design_selection = ResidueIndexSelector(','.join(str(design_position) for design_position in design_positions))
+        if point_mutations:
+            design_selection = AndResidueSelector(design_selection, NotResidueSelector(mutation_selection))
+    # Declare theozyme positions
+    if theozyme_positions:
+        theozyme_selection = ResidueIndexSelector(','.join(str(theozyme_position) for theozyme_position in theozyme_positions))
+        # Find protein-theozyme interface design positions
+        if design_active_site:
+            theozyme_protein_interface_selection = InterGroupInterfaceByVectorSelector()
+            theozyme_protein_interface_selection.group1_selection(theozyme_selection)
+            theozyme_protein_interface_selection.group2_selection(NotResidueSelector(theozyme_selection))
+            protein_interface_selection = AndResidueSelector(theozyme_protein_interface_selection, \
+                    NotResidueSelector(theozyme_selection))
+            if point_mutations:
+                protein_interface_selection = AndResidueSelector(protein_interface_selection, NotResidueSelector(mutation_selection))
+            if design_positions:
+                design_selection = OrResidueSelector(protein_interface_selection, design_selection)
+            else:
+                design_selection = protein_interface_selection
+    else:
+        theozyme_selection = OrResidueSelector()
+    if not design_positions and not design_active_site:
+        design_selection = OrResidueSelector()
+    elif no_cystine:
+        restriction = RestrictAbsentCanonicalAASRLT()
+        restriction.aas_to_keep('AGILPVFWYDERHKSTMNQ')
+        task_factory.push_back(OperateOnResidueSubset(restriction, design_selection))
+    # Repack and static
+    if point_mutations or design_positions or theozyme_positions:
+        variable_selection = OrResidueSelector(point_mutations, design_positions)
+        focus_selection = OrResidueSelector(variable_selection, theozyme_selection)
+        if repacking_range:
+            # Repack
+            interface_selection = InterGroupInterfaceByVectorSelector()
+            interface_selection.group1_selection(focus_selection)
+            interface_selection.group2_selection(NotResidueSelector(focus_selection))
+            repacking_selection = AndResidueSelector(OrResidueSelector(interface_selection, theozyme_selection), \
+                    NotResidueSelector(variable_selection))
+            task_factory.push_back(OperateOnResidueSubset(repack, repacking_selection))
+            # Static
+            task_factory.push_back(OperateOnResidueSubset(prevent, OrResidueSelector(variable_selection, \
+                    repacking_selection), True))
+        else:
+            # Repack
+            task_factory.push_back(OperateOnResidueSubset(repack, variable_selection, True))
+    else:
+        if repacking_range:
+            # Static
+            task_factory.push_back(PreventRepacking())
+        else:
+            # Repack
+            task_factory.push_back(RestrictToRepacking())
+    if noncanonical_amino_acids:
         ncaa_palette = CustomBaseTypePackerPalette()
         for ncaa in noncanonical_amino_acids:
             ncaa_palette.add_type(ncaa)
         task_factory.set_packer_palette(ncaa_palette)
-
-def create_relax_task_factory(point_mutations: list = list(), theozyme_positions: list = list(), \
-        repacking_range: bool = False, noncanonical_amino_acids: list = list()):
-    task_factory = TaskFactory()
-    task_factory.push_back(IncludeCurrent())
-    repack = RestrictToRepackingRLT()
-    prevent = PreventRepackingRLT()
-    if len(point_mutations) > 0:
-        # Mutate
-        mutated_selector = OrResidueSelector()
-        for point_mutation in point_mutations:
-            mutation_info = point_mutation.split(',')
-            restriction = RestrictAbsentCanonicalAASRLT()
-            restriction.aas_to_keep(mutation_info[1])
-            point_mutation_selector = ResidueIndexSelector(mutation_info[0])
-            task_factory.push_back(OperateOnResidueSubset(restriction, point_mutation_selector))
-            mutated_selector.add_residue_selector(point_mutation_selector)
-        # Repack and static
-        if repacking_range:
-            if len(theozyme_positions) > 0:
-                # Repack
-                theozyme_selector = ResidueIndexSelector(','.join(str(theozyme_position) for theozyme_position in theozyme_positions))
-                interface_selector = InterGroupInterfaceByVectorSelector()
-                focus_selector = OrResidueSelector(mutated_selector, theozyme_selector)
-                interface_selector.group1_selector(focus_selector)
-                interface_selector.group2_selector(NotResidueSelector(focus_selector))
-                repacking_selector = AndResidueSelector(OrResidueSelector(interface_selector, theozyme_selector), \
-                    NotResidueSelector(mutated_selector))
-                task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
-                # Static
-                task_factory.push_back(OperateOnResidueSubset(prevent, OrResidueSelector(mutated_selector, \
-                        repacking_selector), True))
-            else:
-                # Repack
-                interface_selector = InterGroupInterfaceByVectorSelector()
-                interface_selector.group1_selector(mutated_selector)
-                interface_selector.group2_selector(NotResidueSelector(mutated_selector))
-                repacking_selector = AndResidueSelector(interface_selector, NotResidueSelector(mutated_selector))
-                task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
-                # Static
-                task_factory.push_back(OperateOnResidueSubset(prevent, OrResidueSelector(mutated_selector, \
-                        repacking_selector), True))
-        else:
-            # Repack
-            task_factory.push_back(OperateOnResidueSubset(repack, mutated_selector, True))
-    else:
-        if repacking_range:
-            if len(theozyme_positions) > 0:
-                # Repack
-                theozyme_selector = ResidueIndexSelector(','.join(str(theozyme_position) for theozyme_position in theozyme_positions))
-                interface_selector = InterGroupInterfaceByVectorSelector()
-                interface_selector.group1_selector(theozyme_selector)
-                interface_selector.group2_selector(NotResidueSelector(theozyme_selector))
-                repacking_selector = OrResidueSelector(interface_selector, theozyme_selector)
-                task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
-                # Static
-                task_factory.push_back(OperateOnResidueSubset(prevent, repacking_selector, True))
-            else:
-                # Static
-                task_factory.push_back(PreventRepacking())
-        else:
-            # Repack
-            task_factory.push_back(RestrictToRepacking())
-    add_noncanonical_amino_acids(task_factory, noncanonical_amino_acids)
-    return task_factory
-
-def create_design_task_factory(designable_res_indexes: list, theozyme_positions: list = list(), \
-        repacking_range: bool = False, cystine: bool = True, noncanonical_amino_acids: list = list()):
-    task_factory = TaskFactory()
-    task_factory.push_back(IncludeCurrent())
-    # Mutatable
-    designable_selector = ResidueIndexSelector(','.join(str(designable_res_index) for designable_res_index in designable_res_indexes))
-    if not cystine:
-        restriction = RestrictAbsentCanonicalAASRLT()
-        restriction.aas_to_keep('AGILPVFWYDERHKSTCMNQ')
-        task_factory.push_back(OperateOnResidueSubset(restriction, designable_selector))
-    # Repack
-    repack = RestrictToRepackingRLT()
-    prevent = PreventRepackingRLT()
-    if repacking_range:
-        if len(theozyme_positions) > 0:
-            theozyme_selector = ResidueIndexSelector(','.join(str(theozyme_position) for theozyme_position in theozyme_positions))
-            interface_selector = InterGroupInterfaceByVectorSelector()
-            focus_selector = OrResidueSelector(designable_selector, theozyme_selector)
-            interface_selector.group1_selector(focus_selector)
-            interface_selector.group2_selector(NotResidueSelector(focus_selector))
-            repacking_selector = AndResidueSelector(OrResidueSelector(interface_selector, theozyme_selector), \
-                    NotResidueSelector(designable_selector))
-            task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
-            task_factory.push_back(OperateOnResidueSubset(prevent, OrResidueSelector(designable_selector, \
-                    repacking_selector), True))
-        else:
-            interface_selector = InterGroupInterfaceByVectorSelector()
-            interface_selector.group1_selector(designable_selector)
-            interface_selector.group2_selector(NotResidueSelector(designable_selector))
-            repacking_selector = AndResidueSelector(interface_selector, NotResidueSelector(designable_selector))
-            task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
-            task_factory.push_back(OperateOnResidueSubset(prevent, OrResidueSelector(designable_selector, \
-                    repacking_selector), True))
-    else:
-        task_factory.push_back(OperateOnResidueSubset(repack, designable_selector, True))
-    add_noncanonical_amino_acids(task_factory, noncanonical_amino_acids)
-    return task_factory
-
-def create_enzyme_design_task_factory(theozyme_positions: list, repacking_range: bool = False, \
-        cystine: bool = True, noncanonical_amino_acids: list = list()):
-    task_factory = TaskFactory()
-    task_factory.push_back(IncludeCurrent())
-    # Mutatable
-    theozyme_selector = ResidueIndexSelector(','.join(str(theozyme_position) for theozyme_position in theozyme_positions))
-    interface_selector = InterGroupInterfaceByVectorSelector()
-    interface_selector.group1_selector(theozyme_selector)
-    interface_selector.group2_selector(NotResidueSelector(theozyme_selector))
-    designable_selector = AndResidueSelector(interface_selector, NotResidueSelector(theozyme_selector))
-    if not cystine:
-        restriction = RestrictAbsentCanonicalAASRLT()
-        restriction.aas_to_keep('AGILPVFWYDERHKSTCMNQ')
-        task_factory.push_back(OperateOnResidueSubset(restriction, designable_selector))
-    # Repack
-    repack = RestrictToRepackingRLT()
-    if repacking_range:
-        interface2_selector = InterGroupInterfaceByVectorSelector()
-        interface2_selector.group1_selector(interface_selector)
-        interface2_selector.group2_selector(NotResidueSelector(interface_selector))
-        repacking_wo_theozyme_selector = AndResidueSelector(interface2_selector, NotResidueSelector(interface_selector))
-        repacking_selector = OrResidueSelector(repacking_wo_theozyme_selector, theozyme_selector)
-        task_factory.push_back(OperateOnResidueSubset(repack, repacking_selector))
-        prevent = PreventRepackingRLT()
-        task_factory.push_back(OperateOnResidueSubset(prevent, OrResidueSelector(designable_selector, repacking_selector), True))
-    else:
-        task_factory.push_back(OperateOnResidueSubset(repack, designable_selector, True))
-    add_noncanonical_amino_acids(task_factory, noncanonical_amino_acids)
     return task_factory
 
 def create_move_map(pose, ligand_res_indexes: list = list()):
@@ -366,21 +309,13 @@ if __name__ == "__main__":
     else:
         rmsdm = RMSDMetric(pose, ResidueIndexSelector(','.join(str(res) for res in args.rmsd)))
     movers.append(rmsdm)
-    if args.fast_relax:
-        tf = create_relax_task_factory(point_mutations = args.mutations, theozyme_positions = theozyme_positions, \
-                repacking_range = args.only_repack_interface)
-    elif args.designable_sites or args.substrates or args.enzyme_design_constraints:
-        if args.favor_native_residue:
-            favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
-        if args.designable_sites:
-            tf = create_design_task_factory(args.designable_sites, theozyme_positions = theozyme_positions, \
-                    repacking_range = args.only_repack_interface, cystine = args.cystine, \
-                    noncanonical_amino_acids = args.noncanonical_amino_acids)
-        else:
-            tf = create_enzyme_design_task_factory(theozyme_positions, repacking_range = args.only_repack_interface, \
-                    cystine = args.cystine, noncanonical_amino_acids = args.noncanonical_amino_acids)
-    else:
-        tf = create_relax_task_factory(point_mutations = args.mutations, repacking_range = args.only_repack_interface)
+    # create task factory
+    tf = create_task_factory(point_mutations = args.mutations, design_positions = args.design_positions, \
+            theozyme_positions = theozyme_positions, design_active_site = args.design_active_site, \
+            repacking_range = args.only_repack_interface, no_cystine = args.cystine, \
+            noncanonical_amino_acids = args.noncanonical_amino_acids)
+    if args.favor_native_residue and (args.design_positions or args.design_active_site):
+        favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
     # If the substrate is allowed to perform rigid body transformations (under development)
     if args.substrate_rigid_body_transformations:
         if args.substrates:
