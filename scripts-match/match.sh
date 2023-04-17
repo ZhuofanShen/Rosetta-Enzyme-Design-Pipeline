@@ -2,8 +2,8 @@
 while (( $# > 1 ))
 do
     case $1 in
-        -pos) position_files="$2";; # i.e. ../CPG2/CPG2-AB
-        -lig) ligand="$2";; # i.e. ../pAaF/pAaF-product
+        -pos) position_files="$2";; # i.e. ../../proteins/CPG2/CPG2-AB
+        -lig) ligand="$2";; # i.e. ../../ligands/O2beY/O2beY-product
         -mem) memory="$2";;
         *) break;
     esac
