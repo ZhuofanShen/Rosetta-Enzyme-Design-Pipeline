@@ -205,7 +205,7 @@ def write_relax_script(arguments, variant, params_files_py, design_pose_numberin
 symmetry_arg + ' -sf ref2015_cst --score_terms fa_intra_rep_nonprotein:0.545 \
 fa_intra_atr_nonprotein:1 ' + params_files_py + '-enzdes_cst ../../../../../ligands/' + 
 arguments.ligand + '/' + arguments.substrate + '/' + arguments.substrate + 
-suffix + muts_arg + ' -nbh 8.0 -n 50;"\ncd ..;\n')
+suffix + muts_arg + ' -xform -nbh 8.0 -n 50;"\ncd ..;\n')
     with open(arguments.directory + '/' + variant + '/pymol.txt', 'w+') as pymol:
         pymol.write('show sticks, resi ' + '+'.join(mutation[2:-1] for mutation in design_pdb_numbering) + '; hide (h.);')
 
