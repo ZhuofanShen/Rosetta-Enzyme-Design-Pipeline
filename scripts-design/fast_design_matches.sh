@@ -85,7 +85,7 @@ do
                 ${params_files} ${symmetry} -sf ref2015_cst \
                 --score_terms fa_intra_rep_nonprotein:0.545 fa_intra_atr_nonprotein:1 \
                 -enzdes_cst ../../../${ligand}/${substrate}${enzdes_cst_suffix} \
-                -enzdes -no_cys -nataa 1.5 ${neighborhood} ${decoys};"
+                -enzdes -xform -no_cys -nataa 1.5 ${neighborhood} ${decoys};"
             cd ../..
             sleep 0.05
         fi
