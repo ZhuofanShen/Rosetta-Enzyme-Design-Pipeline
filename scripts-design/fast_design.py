@@ -14,8 +14,9 @@ from pyrosetta.rosetta.core.scoring import ScoreType
 from pyrosetta.rosetta.core.scoring.symmetry import SymmetricScoreFunction
 from pyrosetta.rosetta.core.scoring.constraints import *
 from pyrosetta.rosetta.core.select.residue_selector import \
-    AndResidueSelector, NotResidueSelector, OrResidueSelector, \
-    ResidueIndexSelector, InterGroupInterfaceByVectorSelector
+    AndResidueSelector, NotResidueSelector, OrResidueSelector, ChainSelector, \
+    ResidueIndexSelector, ResidueNameSelector, ResiduePropertySelector, \
+    NeighborhoodResidueSelector, InterGroupInterfaceByVectorSelector
 from pyrosetta.rosetta.core.simple_metrics.metrics import \
     RMSDMetric
 from pyrosetta.rosetta.protocols.constraint_generator import \
@@ -49,7 +50,7 @@ def parse_arguments():
     parser.add_argument('-subs', '--substrates', type=int, nargs='*')
     parser.add_argument('-no_cys', '--no_cystine', action='store_true')
     parser.add_argument('-ncaa', '--noncanonical_amino_acids', type=str, nargs='*', default=list(), help='name3')
-    parser.add_argument('-xform', '--substrate_rigid_body_transformations', type=bool, default=False)
+    parser.add_argument('-xform', '--substrate_rigid_body_transformations', action='store_true')
     parser.add_argument('-n', '--decoys', type=int, default=50)
     parser.add_argument('-rmsd', type=int, nargs='*', default=None)
     parser.add_argument('--annotated_name', action='store_true')
@@ -108,13 +109,15 @@ def get_match_pose_indexes(info, pdb, symmetry):
                 break
     return match_substrate_pose_indexes, match_res_pose_indexes
 
-def create_coord_cst(ref_pose=None, no_coord_cst=None):
+def create_coord_cst(ref_pose=None, no_coord_cst=None, sidechain=None):
     coord_cst_gen = CoordinateConstraintGenerator()
     if ref_pose:
         coord_cst_gen.set_reference_pose(ref_pose)
     if no_coord_cst:
         no_coord_cst_selection = ResidueIndexSelector(','.join(str(no_coord_cst_res) for no_coord_cst_res in no_coord_cst))
         coord_cst_gen.set_residue_selection(NotResidueSelector(no_coord_cst_selection))
+    if sidechain:
+        coord_cst_gen.set_sidechain(True)
     return coord_cst_gen
 
 def create_enzdes_cst():
@@ -129,11 +132,18 @@ def create_task_factory(point_mutations: list = None, design_positions: list = N
     '''
     Priority: specified point mutations > specified design positions > theozyme protein interface
     '''
+    # Create task factory
     task_factory = TaskFactory()
+    if noncanonical_amino_acids:
+        ncaa_palette = CustomBaseTypePackerPalette()
+        for ncaa in noncanonical_amino_acids:
+            ncaa_palette.add_type(ncaa)
+        task_factory.set_packer_palette(ncaa_palette)
+    
+    # Every positions are designable by defalut other than specification.
     task_factory.push_back(IncludeCurrent())
-    repack = RestrictToRepackingRLT()
-    prevent = PreventRepackingRLT()
-    # Declare point mutations
+
+    # Specify point mutations
     if point_mutations:
         mutated_position_list = list()
         for point_mutation in point_mutations:
@@ -145,12 +155,16 @@ def create_task_factory(point_mutations: list = None, design_positions: list = N
         mutation_selection = ResidueIndexSelector(','.join(mutated_position_list))
     else:
         mutation_selection = OrResidueSelector()
+
     # Specify design positions
+    design_selection = OrResidueSelector()
+    # Site directed design
     if design_positions:
-        design_selection = ResidueIndexSelector(','.join(str(design_position) for design_position in design_positions))
+        site_spec_design_selection = ResidueIndexSelector(','.join(str(design_position) for design_position in design_positions))
         if point_mutations:
-            design_selection = AndResidueSelector(design_selection, NotResidueSelector(mutation_selection))
-    # Declare theozyme positions
+            site_spec_design_selection = AndResidueSelector(site_spec_design_selection, NotResidueSelector(mutation_selection))
+        design_selection.add_residue_selector(site_spec_design_selection)
+    # Theozyme protein interface design
     if theozyme_positions:
         theozyme_selection = ResidueIndexSelector(','.join(str(theozyme_position) for theozyme_position in theozyme_positions))
         # Find protein-theozyme interface design positions
@@ -162,54 +176,60 @@ def create_task_factory(point_mutations: list = None, design_positions: list = N
                     NotResidueSelector(theozyme_selection))
             if point_mutations:
                 protein_interface_selection = AndResidueSelector(protein_interface_selection, NotResidueSelector(mutation_selection))
-            if design_positions:
-                design_selection = OrResidueSelector(protein_interface_selection, design_selection)
-            else:
-                design_selection = protein_interface_selection
+            design_selection.add_residue_selector(protein_interface_selection)
     else:
         theozyme_selection = OrResidueSelector()
-    if not design_positions and not design_active_site:
-        design_selection = OrResidueSelector()
-    elif no_cystine:
+
+    if no_cystine:
         restriction = RestrictAbsentCanonicalAASRLT()
         restriction.aas_to_keep('AGILPVFWYDERHKSTMNQ')
         task_factory.push_back(OperateOnResidueSubset(restriction, design_selection))
+
     # Repack and static
     if point_mutations or design_positions or theozyme_positions:
-        variable_selection = OrResidueSelector(mutation_selection, design_selection)
-        focus_selection = OrResidueSelector(variable_selection, theozyme_selection)
+        aa_substitution_selection = OrResidueSelector(mutation_selection, design_selection)
+        focus_selection = OrResidueSelector(aa_substitution_selection, theozyme_selection)
         if repacking_range:
             # Repack
             interface_selection = InterGroupInterfaceByVectorSelector()
             interface_selection.group1_selector(focus_selection)
             interface_selection.group2_selector(NotResidueSelector(focus_selection))
-            repacking_selection = AndResidueSelector(OrResidueSelector(interface_selection, theozyme_selection), \
-                    NotResidueSelector(variable_selection))
-            task_factory.push_back(OperateOnResidueSubset(repack, repacking_selection))
+            movable_selection = OrResidueSelector(interface_selection, theozyme_selection)
+            repacking_selection = AndResidueSelector(movable_selection, \
+                    NotResidueSelector(aa_substitution_selection))
+            movable_selection = OrResidueSelector(movable_selection, aa_substitution_selection)
+            task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), repacking_selection))
             # Static
-            task_factory.push_back(OperateOnResidueSubset(prevent, OrResidueSelector(variable_selection, \
+            task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), OrResidueSelector(aa_substitution_selection, \
                     repacking_selection), True))
         else:
             # Repack
-            task_factory.push_back(OperateOnResidueSubset(repack, variable_selection, True))
+            movable_selection = None
+            task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), aa_substitution_selection, True))
     else:
         if repacking_range:
             # Static
+            movable_selection = OrResidueSelector()
             task_factory.push_back(PreventRepacking())
         else:
             # Repack
+            movable_selection = None
             task_factory.push_back(RestrictToRepacking())
-    if noncanonical_amino_acids:
-        ncaa_palette = CustomBaseTypePackerPalette()
-        for ncaa in noncanonical_amino_acids:
-            ncaa_palette.add_type(ncaa)
-        task_factory.set_packer_palette(ncaa_palette)
-    return task_factory
 
-def create_move_map(pose, ligand_res_indexes: list = list()):
+    return task_factory, movable_selection
+
+def create_move_map(pose, movable_selection, ligand_res_indexes: list = list()):
     mm = MoveMap()
-    mm.set_bb(True)
-    mm.set_chi(True)
+    if movable_selection:
+        interface_selector = InterGroupInterfaceByVectorSelector()
+        interface_selector.group1_selector(movable_selection)
+        interface_selector.group2_selector(NotResidueSelector(movable_selection))
+        chi_minimization_selection = OrResidueSelector(movable_selection, interface_selector)
+        mm.set_bb(movable_selection.apply(pose))
+        mm.set_chi(chi_minimization_selection.apply(pose))
+    else:
+        mm.set_bb(True)
+        mm.set_chi(True)
     if len(ligand_res_indexes) > 0:
         for ligand_pose_id in ligand_res_indexes:
             edge = pose.fold_tree().get_residue_edge(ligand_pose_id)
@@ -310,21 +330,21 @@ if __name__ == "__main__":
         rmsdm = RMSDMetric(pose, ResidueIndexSelector(','.join(str(res) for res in args.rmsd)))
     movers.append(rmsdm)
     # create task factory
-    tf = create_task_factory(point_mutations = args.mutations, design_positions = args.design_positions, \
+    tf, movable_selection = create_task_factory(point_mutations = args.mutations, design_positions = args.design_positions, \
             theozyme_positions = theozyme_positions, design_active_site = args.design_active_site, \
             repacking_range = args.only_repack_interface, no_cystine = args.no_cystine, \
             noncanonical_amino_acids = args.noncanonical_amino_acids)
     if args.favor_native_residue and (args.design_positions or args.design_active_site):
         favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
-    # If the substrate is allowed to perform rigid body transformations (under development)
+    # the substrate is allowed to perform rigid body transformations
     if args.substrate_rigid_body_transformations:
         if args.substrates:
-            mm = create_move_map(pose, ligand_res_indexes = args.substrates)
+            mm = create_move_map(pose, movable_selection, ligand_res_indexes = args.substrates)
         elif args.enzyme_design_constraints:
-            mm = create_move_map(pose, ligand_res_indexes = match_substrate_pose_indexes)
-        fr = create_fast_relax_mover(sfxn, tf, move_map = mm)
+            mm = create_move_map(pose, movable_selection, ligand_res_indexes = match_substrate_pose_indexes)
     else:
-        fr = create_fast_relax_mover(sfxn, tf)
+        mm = create_move_map(pose, movable_selection)
+    fr = create_fast_relax_mover(sfxn, tf, move_map = mm)
     movers.append(fr)
     name = args.pdb.split('/')[-1][:-4]
     if args.debug_mode:
