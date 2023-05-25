@@ -82,9 +82,9 @@ def create_fold_tree(edge_list):
             raise Exception("The number of arguments in add_edge function should be 3 or 4")
     return fold_tree
 
-def get_match_pose_indexes(info, pdb, symmetry):
-    match_substrate_pose_indexes = set()
-    match_res_pose_indexes = set()
+def get_match_pose_indices(info, pdb, symmetry):
+    match_substrate_pose_indices = list()
+    match_res_pose_indices = list()
     flag = False
     main_chain = None
     with open(pdb, 'r') as pdb:
@@ -97,17 +97,17 @@ def get_match_pose_indexes(info, pdb, symmetry):
                 if main_chain == substrate_chain_id or not symmetry:
                     substrate_res_id = int(line[32:36])
                     substrate_pose_id = info.pdb2pose(substrate_chain_id, substrate_res_id)
-                    match_substrate_pose_indexes.add(substrate_pose_id)
+                    match_substrate_pose_indices.append(substrate_pose_id)
                 # match residues
                 motif_chain_id = line[49]
                 if main_chain == motif_chain_id or not symmetry:
                     motif_res_id = int(line[55:59])
                     motif_pose_id = info.pdb2pose(motif_chain_id, motif_res_id)
-                    match_res_pose_indexes.add(motif_pose_id)
+                    match_res_pose_indices.append(motif_pose_id)
                 flag = True
             elif flag == True:
                 break
-    return match_substrate_pose_indexes, match_res_pose_indexes
+    return match_substrate_pose_indices, match_res_pose_indices
 
 def create_coord_cst(ref_pose=None, no_coord_cst=None, sidechain=None):
     coord_cst_gen = CoordinateConstraintGenerator()
@@ -218,7 +218,7 @@ def create_task_factory(point_mutations: list = None, design_positions: list = N
 
     return task_factory, movable_selection
 
-def create_move_map(pose, movable_selection, ligand_res_indexes: list = list()):
+def create_move_map(pose, movable_selection, ligand_res_indices: list = list()):
     mm = MoveMap()
     if movable_selection:
         interface_selector = InterGroupInterfaceByVectorSelector()
@@ -230,8 +230,8 @@ def create_move_map(pose, movable_selection, ligand_res_indexes: list = list()):
     else:
         mm.set_bb(True)
         mm.set_chi(True)
-    if len(ligand_res_indexes) > 0:
-        for ligand_pose_id in ligand_res_indexes:
+    if len(ligand_res_indices) > 0:
+        for ligand_pose_id in ligand_res_indices:
             edge = pose.fold_tree().get_residue_edge(ligand_pose_id)
             if not edge.is_jump():
                 raise Exception('Edge of the ligand is not a jump edge.')
@@ -302,9 +302,9 @@ if __name__ == "__main__":
     theozyme_positions = set()
     if args.enzyme_design_constraints:
         pdb_info = pose.pdb_info()
-        match_substrate_pose_indexes, match_res_pose_indexes = get_match_pose_indexes(pdb_info, args.pdb, args.symmetry)
-        match_indexes = match_substrate_pose_indexes.union(match_res_pose_indexes)
-        theozyme_positions.update(match_index for match_index in match_indexes)
+        match_substrate_pose_indices, match_res_pose_indices = get_match_pose_indices(pdb_info, args.pdb, args.symmetry)
+        match_indices = set(match_substrate_pose_indices + match_res_pose_indices)
+        theozyme_positions.update(match_index for match_index in match_indices)
     if args.substrates:
         theozyme_positions.update(args.substrates)
     # coordinate constraint
@@ -339,9 +339,11 @@ if __name__ == "__main__":
     # the substrate is allowed to perform rigid body transformations
     if args.substrate_rigid_body_transformations:
         if args.substrates:
-            mm = create_move_map(pose, movable_selection, ligand_res_indexes = args.substrates)
+            mm = create_move_map(pose, movable_selection, ligand_res_indices = args.substrates)
         elif args.enzyme_design_constraints:
-            mm = create_move_map(pose, movable_selection, ligand_res_indexes = match_substrate_pose_indexes)
+            mm = create_move_map(pose, movable_selection, ligand_res_indices = match_substrate_pose_indices)
+        else:
+            mm = create_move_map(pose, movable_selection)
     else:
         mm = create_move_map(pose, movable_selection)
     fr = create_fast_relax_mover(sfxn, tf, move_map = mm)
@@ -350,8 +352,8 @@ if __name__ == "__main__":
     if args.debug_mode:
         print(pose.fold_tree())
         if args.enzyme_design_constraints:
-            print(match_substrate_pose_indexes)
-            print(match_res_pose_indexes)
+            print(match_substrate_pose_indices)
+            print(match_res_pose_indices)
         print(tf.create_task_and_apply_taskoperations(pose))
         print(mm)
     else:
