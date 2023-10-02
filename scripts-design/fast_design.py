@@ -314,16 +314,18 @@ def create_task_factory(point_mutations: set = set(), design_positions: set = se
         # Find protein-theozyme interface design positions
         if design_active_site:
             theozyme_protein_interface_selection = InterGroupInterfaceByVectorSelector()
-            # theozyme_protein_interface_selection.nearby_atom_cut(7.0) # 5.5
-            # theozyme_protein_interface_selection.cb_dist_cut(12.0) # 11.0
-            # theozyme_protein_interface_selection.vector_dist_cut(10.5) # 9.0
-            # theozyme_protein_interface_selection.vector_angle_cut(76.0) # 75.0
             theozyme_protein_interface_selection.group1_selector(theozyme_selection)
             theozyme_protein_interface_selection.group2_selector(NotResidueSelector(theozyme_selection))
             protein_interface_selection = AndResidueSelector(theozyme_protein_interface_selection, \
                     NotResidueSelector(theozyme_selection))
             if len(point_mutations) > 0:
-                protein_interface_selection = AndResidueSelector(protein_interface_selection, NotResidueSelector(mutation_selection))
+                protein_interface_selection = AndResidueSelector(protein_interface_selection, \
+                        NotResidueSelector(mutation_selection))
+            if ddG_ref_pose:
+                protein_interface_vector = protein_interface_selection.apply(ddG_ref_pose)
+                protein_interface_selection = ResidueIndexSelector(",".join(filter(lambda x: x is not None, \
+                        map(lambda x, y: str(x) if y == 1 else None, \
+                        range(1, len(protein_interface_vector) + 1), protein_interface_vector))))
             design_selection.add_residue_selector(protein_interface_selection)
     else:
         theozyme_selection = OrResidueSelector()
@@ -455,21 +457,16 @@ def main(args):
         coord_ref_pose = pose_from_pdb(args.coordinate_reference_pdb)
     ddG_ref_pose = None
     if args.ddG_reference_pdb:
-        ddG_ref_pose = pose_from_pdb(args.ddG_reference_pdb)
+        if args.ddG_reference_pdb == "True":
+            ddG_ref_pose = Pose(pose)
+        else:
+            ddG_ref_pose = pose_from_pdb(args.ddG_reference_pdb)
     if args.fold_tree:
         fold_tree = create_fold_tree(args.fold_tree)
         pose.fold_tree(fold_tree)
-        if args.coordinate_reference_pdb:
-            coord_ref_pose.fold_tree(fold_tree)
-        if args.ddG_coordinate_reference_pdb:
-            ddG_ref_pose.fold_tree(fold_tree)
     for chi in args.chi_dihedrals:
         chi_info = chi.split(",")
         pose.set_chi(int(chi_info[0]), int(chi_info[1]), float(chi_info[2]))
-        # if args.coordinate_reference_pdb:
-        #     coord_ref_pose.set_chi(int(chi_info[0]), int(chi_info[1]), float(chi_info[2]))
-        # if args.ddG_reference_pdb:
-        #     ddG_ref_pose.set_chi(int(chi_info[0]), int(chi_info[1]), float(chi_info[2]))
     # Applying symmetry if specified
     set_symmetry(args.symmetry, [pose, coord_ref_pose, ddG_ref_pose])
     # create score function
