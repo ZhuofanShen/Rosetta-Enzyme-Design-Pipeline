@@ -342,10 +342,6 @@ def create_task_factory(point_mutations: set = set(), design_positions: set = se
         if repacking_range:
             # Repack
             substitution_repacking_selection = InterGroupInterfaceByVectorSelector()
-            # substitution_repacking_selection.nearby_atom_cut(7.0) # 5.5
-            # substitution_repacking_selection.cb_dist_cut(12.0) # 11.0
-            # substitution_repacking_selection.vector_dist_cut(10.5) # 9.0
-            # substitution_repacking_selection.vector_angle_cut(76.0) # 75.0
             substitution_repacking_selection.group1_selector(substitution_theozyme_selection)
             substitution_repacking_selection.group2_selector(NotResidueSelector(substitution_theozyme_selection))
             substitution_repacking_selection = OrResidueSelector(substitution_repacking_selection, \
@@ -382,10 +378,6 @@ def create_move_map(pose, substitution_repacking_selection = None, ddG_ref_pose 
     move_map = MoveMap()
     if substitution_repacking_selection:
         interface_selector = InterGroupInterfaceByVectorSelector()
-        interface_selector.nearby_atom_cut(10.0) # 5.5
-        interface_selector.cb_dist_cut(15.0) # 11.0
-        interface_selector.vector_dist_cut(12.0) # 9.0
-        interface_selector.vector_angle_cut(80.0) # 75.0
         interface_selector.group1_selector(substitution_repacking_selection)
         interface_selector.group2_selector(NotResidueSelector(substitution_repacking_selection))
         minimization_selection = OrResidueSelector(substitution_repacking_selection, interface_selector)
@@ -506,10 +498,10 @@ def main(args):
     mutation_pose_indices = pdb_to_pose_numbering(pose, args.mutations)
     design_pose_indices = pdb_to_pose_numbering(pose, args.design_positions)
     # create task factory
-    task_factory, substitution_repacking_selection = create_task_factory(point_mutations = mutation_pose_indices, design_positions = design_pose_indices, \
-            theozyme_positions = theozyme_positions, design_active_site = args.design_active_site, \
-            repacking_range = args.repack_interface_only, ddG_ref_pose = ddG_ref_pose, no_cystine = args.no_cystine, \
-            noncanonical_amino_acids = args.noncanonical_amino_acids)
+    task_factory, substitution_repacking_selection = create_task_factory(point_mutations = mutation_pose_indices, \
+            design_positions = design_pose_indices, theozyme_positions = theozyme_positions, \
+            design_active_site = args.design_active_site, repacking_range = args.repack_interface_only, \
+            ddG_ref_pose = ddG_ref_pose, no_cystine = args.no_cystine, noncanonical_amino_acids = args.noncanonical_amino_acids)
     # coordinate constraint
     if len(args.no_coordinate_constraint_residues) > 0:
         no_coord_cst_residues = pdb_to_pose_numbering(pose, args.no_coordinate_constraint_residues)
