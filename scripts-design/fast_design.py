@@ -7,20 +7,20 @@ from pyrosetta.rosetta.core.id import AtomID
 from pyrosetta.rosetta.core.pack.palette import CustomBaseTypePackerPalette
 from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.pack.task.operation import \
-    InitializeFromCommandline, IncludeCurrent, ExtraRotamers, \
-    OperateOnResidueSubset, RestrictToRepackingRLT, \
-    RestrictAbsentCanonicalAASRLT, PreventRepackingRLT, \
-    RestrictToRepacking, PreventRepacking
+    IncludeCurrent, ExtraRotamers, OperateOnResidueSubset, \
+    RestrictToRepackingRLT, RestrictAbsentCanonicalAASRLT, \
+    PreventRepackingRLT, PreventRepacking
 from pyrosetta.rosetta.core.scoring import ScoreType
 from pyrosetta.rosetta.core.scoring.constraints import \
     add_fa_constraints_from_cmdline, ConstraintSet, AmbiguousConstraint, \
     AtomPairConstraint, AngleConstraint, DihedralConstraint
-from pyrosetta.rosetta.core.scoring.func import CircularHarmonicFunc, \
-    FlatHarmonicFunc, HarmonicFunc
+from pyrosetta.rosetta.core.scoring.func import HarmonicFunc, \
+    FlatHarmonicFunc, CircularHarmonicFunc
 from pyrosetta.rosetta.core.scoring.symmetry import SymmetricScoreFunction
 from pyrosetta.rosetta.core.select.residue_selector import \
     AndResidueSelector, NotResidueSelector, OrResidueSelector, \
-    ResidueIndexSelector, InterGroupInterfaceByVectorSelector
+    ResidueIndexSelector, InterGroupInterfaceByVectorSelector, \
+    NeighborhoodResidueSelector
 from pyrosetta.rosetta.core.simple_metrics.metrics import \
     RMSDMetric, TotalEnergyMetric
 from pyrosetta.rosetta.protocols.constraint_generator import \
@@ -38,32 +38,38 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("pdb", type=str)
     parser.add_argument("-ref", "--coordinate_reference_pdb", type=str)
+    parser.add_argument("-ddG_ref", "--ddG_reference_pdb", type=str)
     parser.add_argument("-params", "--parameters_files", type=str, nargs="*")
+    parser.add_argument("-optH", "--optimize_protonation_state", action="store_true")
+    parser.add_argument("-symm", "--symmetry", type=str)
     parser.add_argument("-ft", "--fold_tree", type=str, nargs="*")
     parser.add_argument("-chis", "--chi_dihedrals", type=str, nargs="*", default=list())
     parser.add_argument("-sf", "--score_function", type=str, default="ref2015_cst")
     parser.add_argument("--score_terms", type=str, nargs="*", default=list())
-    parser.add_argument("-symm", "--symmetry", type=str)
     parser.add_argument("-coord_boundary", "--coordinate_constraint_bounded_width", type=float)
-    parser.add_argument("-no_coord_cst", "--no_coordinate_constraint_residues", type=str, nargs="*", default=list())
+    parser.add_argument("-no_coord_cst", "--no_coordinate_constraint_residues", \
+            type=str, nargs="*", default=list())
+    parser.add_argument("-no_opt_coord_cst", "--no_coordinate_constraint_on_optimization_region", \
+            action="store_true")
     parser.add_argument("-cst", "--constraints", type=str)
-    parser.add_argument("-muts", "--mutations", type=str, nargs="*", default=list())
-    parser.add_argument("-nataa", "--favor_native_residue", type=float)
-    parser.add_argument("-des", "--design_positions", type=str, nargs="*", default=list())
-    parser.add_argument("-no_opt_coord_cst", "--no_optimization_region_coordinate_constraint", action="store_true")
     parser.add_argument("-enzdes_cst", "--enzyme_design_constraints", type=str)
-    parser.add_argument("--design_active_site", action="store_true")
+    parser.add_argument("-static", "--static_positions", type=str, nargs="*", default=list())
+    parser.add_argument("-muts", "--mutations", type=str, nargs="*", default=list())
+    parser.add_argument("-des", "--design_positions", type=str, nargs="*", default=list())
     parser.add_argument("-subs", "--substrates", type=str, nargs="*")
-    parser.add_argument("-rpk_intf", "--repack_interface_only", action="store_true")
-    parser.add_argument("-min_intf", "--minimize_interface_only", action="store_true")
-    parser.add_argument("-ddG_ref", "--ddG_reference_pdb", type=str)
-    parser.add_argument("-xform", "--substrate_rigid_body_transformations", action="store_true")
+    parser.add_argument("-cat", "--catalytic_residues", type=str, nargs="*")
+    parser.add_argument("--design_binding_site", action="store_true")
+    parser.add_argument("-nataa", "--favor_native_residue", type=float)
+    parser.add_argument("-noaa", "--excluded_amino_acid_types", type=str, \
+            help="String of one-letter AA codes.")
+    parser.add_argument("-ncaa", "--noncanonical_amino_acids", type=str, \
+            nargs="*", default=list(), help="name3")
     parser.add_argument("-premin", "--pre_minimization", action="store_true")
-    parser.add_argument("-no_cys", "--no_cystine", action="store_true")
-    parser.add_argument("-ncaa", "--noncanonical_amino_acids", type=str, nargs="*", default=list(), help="name3")
-    parser.add_argument("-optH", "--optimize_protonation_state", action="store_true")
+    parser.add_argument("-tform", "--substrate_rigid_body_transformations", action="store_true")
+    parser.add_argument("-rpk_nbh", "--repack_neighborhood_only", action="store_true")
+    parser.add_argument("-min_nbh", "--minimize_neighborhood_only", action="store_true")
     parser.add_argument("-no_rmsd", "--no_rmsd_residues", type=str, nargs="*", default=list())
-    parser.add_argument("-n", "--decoys", type=int, default=50)
+    parser.add_argument("-n", "--n_decoys", type=int, default=50)
     parser.add_argument("--annotated_name", action="store_true")
     parser.add_argument("-debug", "--debug_mode", action="store_true")
     args = parser.parse_args()
@@ -105,7 +111,8 @@ def set_score_function(score_function_weight_file, symmetry=False, score_terms=l
         exec("score_function.set_weight(ScoreType.{}, {})".format(term_weight[0], term_weight[1]))
     return score_function
 
-def customize_score_function(rep_type="hard", cartesian=False, symmetry=False, membrane=False, constraint_weight=1.0, score_terms=list()):
+def customize_score_function(rep_type="hard", cartesian=False, symmetry=False, \
+        membrane=False, constraint_weight=1.0, score_terms=list()):
     """
     Custimize an appropriate score function on top of a L-J potential 
     that is either hard (ref2015) or soft (ref2015_soft), and having  
@@ -196,11 +203,12 @@ def get_match_pose_indices(info, pdb, symmetry):
                     motif_pose_id = info.pdb2pose(motif_chain_id, motif_res_id)
                     match_res_pose_indices.add(motif_pose_id)
                 flag = True
-            elif flag == True:
+            elif flag is True:
                 break
     return match_substrate_pose_indices, match_res_pose_indices
 
-def create_coord_cst(coord_ref_pose=None, coord_boundary = None, no_coord_cst_selection = False, sidechain=False):
+def create_coord_cst(coord_ref_pose=None, coord_boundary = None, \
+            no_coord_cst_selection = False, sidechain=False):
     coord_cst_gen = CoordinateConstraintGenerator()
     if coord_boundary:
         coord_cst_gen.set_bounded(True)
@@ -216,11 +224,50 @@ def create_coord_cst(coord_ref_pose=None, coord_boundary = None, no_coord_cst_se
         coord_cst_gen.set_sidechain(True)
     return coord_cst_gen
 
+def apply_atom_pair_constraint(pose, atom_name_list, residue_id_list, distance, \
+        standard_deviation, bound=None):
+    atom_list = list()
+    for atom_name, residue_id in zip(atom_name_list, residue_id_list):
+        atom_list.append(AtomID(pose.residue(residue_id).atom_index(atom_name), residue_id))
+    if type(distance) is list:
+        harmonic_cst = AmbiguousConstraint()
+        if bound:
+            for i, dis_sd in enumerate(zip(distance, standard_deviation)):
+                if bound:
+                    harmonic_fc = FlatHarmonicFunc(dis_sd[0], dis_sd[1], bound[i])
+                else:
+                    harmonic_fc = HarmonicFunc(dis_sd[0], dis_sd[1])
+                cst = AtomPairConstraint(atom_list[0], atom_list[1], harmonic_fc)
+                harmonic_cst.add_individual_constraint(cst)
+    else:
+        if bound:
+            harmonic_fc = FlatHarmonicFunc(distance, standard_deviation, bound)
+        else:
+            harmonic_fc = HarmonicFunc(distance, standard_deviation)
+        harmonic_cst = AtomPairConstraint(atom_list[0], atom_list[1], harmonic_fc)
+    pose.add_constraint(harmonic_cst)
+
+def apply_angle_constraint(pose, atom_name_list, residue_id_list, degree, standard_deviation):
+    atom_list = list()
+    for atom_name, residue_id in zip(atom_name_list, residue_id_list):
+        atom_list.append(AtomID(pose.residue(residue_id).atom_index(atom_name), residue_id))
+    if type(degree) is list:
+        circular_harmonic_cst = AmbiguousConstraint()
+        for deg, sd in zip(degree, standard_deviation):
+            circular_harmonic_fc = CircularHarmonicFunc(math.pi / 180 * deg, sd)
+            cst = AngleConstraint(atom_list[0], atom_list[1], atom_list[2], circular_harmonic_fc)
+            circular_harmonic_cst.add_individual_constraint(cst)
+    else:
+        circular_harmonic_fc = CircularHarmonicFunc(math.pi / 180 * degree, standard_deviation)
+        circular_harmonic_cst = AngleConstraint(atom_list[0], atom_list[1], \
+                atom_list[2], circular_harmonic_fc)
+    pose.add_constraint(circular_harmonic_cst)
+
 def apply_dihedral_constraint(pose, atom_name_list, residue_id_list, degree, standard_deviation):
     atom_list = list()
     for atom_name, residue_id in zip(atom_name_list, residue_id_list):
         atom_list.append(AtomID(pose.residue(residue_id).atom_index(atom_name), residue_id))
-    if type(degree) == list:
+    if type(degree) is list:
         circular_harmonic_cst = AmbiguousConstraint()
         for deg, sd in zip(degree, standard_deviation):
             circular_harmonic_fc = CircularHarmonicFunc(math.pi / 180 * deg, sd)
@@ -228,7 +275,8 @@ def apply_dihedral_constraint(pose, atom_name_list, residue_id_list, degree, sta
             circular_harmonic_cst.add_individual_constraint(cst)
     else:
         circular_harmonic_fc = CircularHarmonicFunc(math.pi / 180 * degree, standard_deviation)
-        circular_harmonic_cst = DihedralConstraint(atom_list[0], atom_list[1], atom_list[2], atom_list[3], circular_harmonic_fc)
+        circular_harmonic_cst = DihedralConstraint(atom_list[0], atom_list[1], \
+                atom_list[2], atom_list[3], circular_harmonic_fc)
     pose.add_constraint(circular_harmonic_cst)
 
 def create_enzdes_cst():
@@ -236,16 +284,6 @@ def create_enzdes_cst():
     enz_cst = AddOrRemoveMatchCsts()
     enz_cst.set_cst_action(ADD_NEW)
     return enz_cst
-
-def pre_minimization(pose, substrate_pose_indices):
-    move_map = MoveMap()
-    move_map.set_bb(False)
-    substrate_catalytic_sidechain_selector = ResidueIndexSelector(",".join(str(substrate_pose_index) for substrate_pose_index in substrate_pose_indices))
-    move_map.set_chi(substrate_catalytic_sidechain_selector.apply(pose))
-    pre_minimizer = MinMover()
-    pre_minimizer.min_type("lbfgs_armijo_nonmonotone")
-    pre_minimizer.movemap(move_map)
-    return pre_minimizer
 
 def pdb_to_pose_numbering(pose, chain_id_pdb_indices):
     pose_indices = set()
@@ -270,145 +308,203 @@ def pdb_to_pose_numbering(pose, chain_id_pdb_indices):
                     pose_indices.add(pose_index)
     return pose_indices
 
-def create_task_factory(point_mutations: set = set(), design_positions: set = set(), \
-        theozyme_positions: set = set(), design_active_site: bool = False, repacking_range: bool = False, \
-        ddG_ref_pose = None, no_cystine: bool = False, noncanonical_amino_acids: list = None):
+def get_jump_edges(fold_tree, rigid_body_tform_pose_indices):
+    jump_edges = set()
+    for rigid_body_tform_pose_index in rigid_body_tform_pose_indices:
+        jump_edge = fold_tree.get_residue_edge(rigid_body_tform_pose_index)
+        if not jump_edge.is_jump():
+            raise Exception("Edge of the ligand is not a jump edge.")
+        jump_edges.add(jump_edge.label())
+    return jump_edges
+
+def select_neighborhood_region(focus_selection, include_focus: bool, method="vector"):
+    if method == "vector":
+        neighborhood_selection = InterGroupInterfaceByVectorSelector()
+        neighborhood_selection.group1_selector(focus_selection)
+        neighborhood_selection.group2_selector(NotResidueSelector(focus_selection))
+        if include_focus:
+            neighborhood_selection = OrResidueSelector(neighborhood_selection, \
+                    focus_selection)
+        else:
+            neighborhood_selection = AndResidueSelector(neighborhood_selection, \
+                    NotResidueSelector(focus_selection))
+    elif method == "distance":
+        neighborhood_selection = NeighborhoodResidueSelector()
+        neighborhood_selection.set_focus_selector(focus_selection)
+        neighborhood_selection.set_distance(8.0)
+        neighborhood_selection.set_include_focus_in_subset(include_focus)
+    return neighborhood_selection
+
+def fix_residue_set_selection(selector, ddG_ref_pose):
+    residue_set_vector = selector.apply(ddG_ref_pose)
+    fixed_residue_set_selection = ResidueIndexSelector(",".join(filter(lambda x: x is not None, \
+            map(lambda x, y: str(x) if y == 1 else None, \
+            range(1, len(residue_set_vector) + 1), residue_set_vector))))
+    return fixed_residue_set_selection
+
+def pre_minimization(pose, theozyme_positions, jump_edges: set = set()):
+    pre_minimization_selector = ResidueIndexSelector(",".join(str(theozyme_position) \
+            for theozyme_position in theozyme_positions))
+    move_map = MoveMap()
+    move_map.set_bb(False)
+    move_map.set_chi(pre_minimization_selector.apply(pose))
+    for jump_edge in jump_edges:
+        move_map.set_jump(jump_edge, True)
+    pre_minimizer = MinMover()
+    pre_minimizer.min_type("lbfgs_armijo_nonmonotone")
+    pre_minimizer.movemap(move_map)
+    return pre_minimizer
+
+def create_task_factory(static_positions: set = set(), point_mutations: set = set(), \
+        design_positions: set = set(), theozyme_positions: set = set(), \
+        design_binding_site: bool = False, only_repack_neighborhood: bool = False, \
+        ddG_ref_pose = None, excluded_amino_acid_types: str = None, \
+        noncanonical_amino_acids: list = None):
     """
-    Priority: point mutations > specified design positions > protein-ligand interface design
+    Priority:
+        1. Freeze static residues.
+        2. Introduce point mutations.
+        3. Perform site-directed design.
+        4. Design protein-ligand interfaces.
     """
-    # Create task factory
+    # Create a task factory.
     task_factory = TaskFactory()
     if noncanonical_amino_acids:
         ncaa_palette = CustomBaseTypePackerPalette()
         for ncaa in noncanonical_amino_acids:
             ncaa_palette.add_type(ncaa)
         task_factory.set_packer_palette(ncaa_palette)
-    
-    # Every positions are designable by defalut other than specification.
+
+    # Every position is designable by defalut other than explicit specification.
     task_factory.push_back(IncludeCurrent())
 
-    # Specify point mutations
-    if len(point_mutations) > 0:
-        mutated_position_list = set()
-        for point_mutation in point_mutations:
-            position_aa = point_mutation.split(",")
+    # Specify the point mutations.
+    mutation_positions = set()
+    for point_mutation in point_mutations:
+        mutating_position, target_aa = point_mutation.split(",")
+        if not mutating_position in static_positions:
             restriction = RestrictAbsentCanonicalAASRLT()
-            restriction.aas_to_keep(position_aa[1])
-            task_factory.push_back(OperateOnResidueSubset(restriction, ResidueIndexSelector(position_aa[0])))
-            mutated_position_list.add(position_aa[0])
-        mutation_selection = ResidueIndexSelector(",".join(mutated_position_list))
-    else:
-        mutation_selection = OrResidueSelector()
+            restriction.aas_to_keep(target_aa)
+            task_factory.push_back(OperateOnResidueSubset(restriction, \
+                    ResidueIndexSelector(mutating_position)))
+            mutation_positions.add(mutating_position)
+    mutation_selection = ResidueIndexSelector(",".join(mutation_positions) + ",")
+    interface_design_excluding_positions = static_positions.union(mutation_positions)
 
-    # Specify design positions
+    # Select the design positions.
     design_selection = OrResidueSelector()
-    # Site directed design
+    # Specify the site-directed design positions.
+    if len(static_positions) > 0:
+        design_positions = design_positions - static_positions
+    if len(mutation_positions) > 0:
+        design_positions = design_positions - mutation_positions
     if len(design_positions) > 0:
-        site_spec_design_selection = ResidueIndexSelector(",".join(str(design_position) for design_position in design_positions))
-        if len(point_mutations) > 0:
-            site_spec_design_selection = AndResidueSelector(site_spec_design_selection, NotResidueSelector(mutation_selection))
-        design_selection.add_residue_selector(site_spec_design_selection)
-    # Theozyme protein interface design
-    if len(theozyme_positions) > 0:
-        theozyme_selection = ResidueIndexSelector(",".join(str(theozyme_position) for theozyme_position in theozyme_positions))
-        # Find protein-theozyme interface design positions
-        if design_active_site:
-            theozyme_protein_interface_selection = InterGroupInterfaceByVectorSelector()
-            theozyme_protein_interface_selection.group1_selector(theozyme_selection)
-            theozyme_protein_interface_selection.group2_selector(NotResidueSelector(theozyme_selection))
-            protein_interface_selection = AndResidueSelector(theozyme_protein_interface_selection, \
-                    NotResidueSelector(theozyme_selection))
-            if len(point_mutations) > 0:
-                protein_interface_selection = AndResidueSelector(protein_interface_selection, \
-                        NotResidueSelector(mutation_selection))
-            if ddG_ref_pose:
-                protein_interface_vector = protein_interface_selection.apply(ddG_ref_pose)
-                protein_interface_selection = ResidueIndexSelector(",".join(filter(lambda x: x is not None, \
-                        map(lambda x, y: str(x) if y == 1 else None, \
-                        range(1, len(protein_interface_vector) + 1), protein_interface_vector))))
-            design_selection.add_residue_selector(protein_interface_selection)
-    else:
-        theozyme_selection = OrResidueSelector()
+        site_directed_design_selection = ResidueIndexSelector(\
+            ",".join(str(design_position) for design_position in design_positions))
+        design_selection.add_residue_selector(site_directed_design_selection)
+    interface_design_excluding_positions = interface_design_excluding_positions.union(design_positions)
+    # Specify the theozyme positions.
+    theozyme_selection = ResidueIndexSelector(",".join(str(theozyme_position)\
+            for theozyme_position in theozyme_positions) + ",")
+    # Design the theozyme-protein interface.
+    if design_binding_site and len(theozyme_positions) > 0:
+        binding_site_selection = select_neighborhood_region(theozyme_selection, False)
+        if len(interface_design_excluding_positions) > 0:
+            binding_site_selection = AndResidueSelector(binding_site_selection, \
+                    NotResidueSelector(ResidueIndexSelector(",".join(interface_design_excluding_positions))))
+        if ddG_ref_pose: # Fix the design positions.
+            binding_site_selection = fix_residue_set_selection(binding_site_selection, ddG_ref_pose)
+        design_selection.add_residue_selector(binding_site_selection)
 
-    if no_cystine:
-        restriction = RestrictAbsentCanonicalAASRLT()
-        restriction.aas_to_keep("AGILPVFWYDERHKSTMNQ")
+    # Exclude some AA types if specified.
+    if excluded_amino_acid_types:
+        all_AAs = set("AGILPVFWYDERHKSTMNQ")
+        excluded_AAs = set(excluded_amino_acid_types)
+        restriction = RestrictAbsentCanonicalAASRLT("".join(\
+                available_AA for available_AA in all_AAs - excluded_AAs))
+        restriction.aas_to_keep()
         task_factory.push_back(OperateOnResidueSubset(restriction, design_selection))
 
-    # Repack and static
-    if len(point_mutations) > 0 or len(design_positions) > 0 or len(theozyme_positions) > 0:
-        substitution_selection = OrResidueSelector(mutation_selection, design_selection)
-        substitution_theozyme_selection = OrResidueSelector(substitution_selection, theozyme_selection)
-        if repacking_range:
-            # Repack
-            substitution_repacking_selection = InterGroupInterfaceByVectorSelector()
-            # substitution_repacking_selection.nearby_atom_cut(7.0) # 5.5
-            # substitution_repacking_selection.cb_dist_cut(12.0) # 11.0
-            # substitution_repacking_selection.vector_dist_cut(10.5) # 9.0
-            # substitution_repacking_selection.vector_angle_cut(76.0) # 75.0
-            substitution_repacking_selection.group1_selector(substitution_theozyme_selection)
-            substitution_repacking_selection.group2_selector(NotResidueSelector(substitution_theozyme_selection))
-            substitution_repacking_selection = OrResidueSelector(substitution_repacking_selection, \
-                    theozyme_selection) # ensure to include theozymes
-            repacking_selection = AndResidueSelector(substitution_repacking_selection, \
-                    NotResidueSelector(substitution_selection)) # repack w/o mutations
-            if ddG_ref_pose:
-                repacking_vector = repacking_selection.apply(ddG_ref_pose)
-                repacking_selection = ResidueIndexSelector(",".join(filter(lambda x: x is not None, \
-                        map(lambda x, y: str(x) if y == 1 else None, range(1, len(repacking_vector) + 1), repacking_vector))))
-            substitution_repacking_selection = OrResidueSelector(repacking_selection, \
-                    substitution_selection) # ensure to include mutations
-            task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), repacking_selection))
-            # Static
-            task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), OrResidueSelector(substitution_selection, \
-                    repacking_selection), True))
-        else:
-            # Repack
-            task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), substitution_selection, True))
-            substitution_repacking_selection = None # all residue
-    else:
-        if repacking_range:
-            # Static
-            task_factory.push_back(PreventRepacking())
-            substitution_repacking_selection = False # no residue
-        else:
-            # Repack
-            task_factory.push_back(RestrictToRepacking())
-            substitution_repacking_selection = None # all residue
+    # Specify the static positions.
+    static_selection = ResidueIndexSelector(",".join(str(static_position) \
+            for static_position in static_positions) + ",")
 
+    # Identify the repack and static regions.
+    if len(mutation_positions) > 0 or len(design_positions) > 0 or len(theozyme_positions) > 0:
+        # Site-directed AA substitutions positions.
+        substitution_selection = OrResidueSelector(mutation_selection, design_selection)
+        # Exclude the site-directed AA substitutions and static positions from repacking.
+        substitution_static_selection = OrResidueSelector(substitution_selection, static_selection)
+        if only_repack_neighborhood:
+            # Repack the neighborhood region of the site-directed AA substitutions and theozyme positions.
+            substitution_theozyme_selection = OrResidueSelector(substitution_selection, theozyme_selection)
+            substitution_repacking_selection = select_neighborhood_region(substitution_theozyme_selection, True)
+            if ddG_ref_pose: # Fix the repacking positions.
+                substitution_repacking_selection = fix_residue_set_selection(\
+                        substitution_repacking_selection, ddG_ref_pose)
+            # Exclude the site-directed AA substitutions and static positions from repacking.
+            repacking_selection = AndResidueSelector(substitution_repacking_selection, \
+                    NotResidueSelector(substitution_static_selection))
+            task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), repacking_selection))
+            # No repacking region.
+            task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), \
+                    OrResidueSelector(substitution_selection, repacking_selection), True))
+        else:
+            # Exclude the site-directed AA substitutions and static positions from repacking.
+            task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), \
+                    substitution_static_selection, True))
+            substitution_repacking_selection = None
+    else:
+        if only_repack_neighborhood:
+            # Do not repack any part of the pose.
+            task_factory.push_back(PreventRepacking())
+            substitution_repacking_selection = False
+        else:
+            # Exclude the static positions from the repacking region.
+            task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), static_selection, True))
+            substitution_repacking_selection = None
     return task_factory, substitution_repacking_selection
 
-def create_move_map(pose, substitution_repacking_selection = None, ddG_ref_pose = None, ligand_res_indices: set = set()):
+def create_move_map(pose, focus_selection = None, only_minimize_neighborhood: bool = False, \
+        static_positions: set = set(), ddG_ref_pose = None, jump_edges: set = set()):
+    '''
+    When "only_minimize_neighborhood" is True, only the "focus_selection" along with its 
+    neighborhood region are subject to minimization except the static positions.
+    Freeze a residue does not mean not to repack and minimize the residues around it, 
+    especially when the freezed residue is included in the theozyme positions.
+    '''
     move_map = MoveMap()
-    if substitution_repacking_selection:
-        interface_selector = InterGroupInterfaceByVectorSelector()
-        interface_selector.nearby_atom_cut(10.0) # 5.5
-        interface_selector.cb_dist_cut(15.0) # 11.0
-        interface_selector.vector_dist_cut(12.0) # 9.0
-        interface_selector.vector_angle_cut(80.0) # 75.0
-        interface_selector.group1_selector(substitution_repacking_selection)
-        interface_selector.group2_selector(NotResidueSelector(substitution_repacking_selection))
-        minimization_selection = OrResidueSelector(substitution_repacking_selection, interface_selector)
-        if ddG_ref_pose: # passing residue indices vectors to a movemap
-            minimization_vector = minimization_selection.apply(ddG_ref_pose)
-            move_map.set_bb(minimization_vector)
-            move_map.set_chi(minimization_vector)
-        else: # passing residue selectors to a movemap factory
-            minimization_vector = minimization_selection.apply(pose)
-            move_map.set_bb(minimization_vector)
-            move_map.set_chi(minimization_vector)
-    elif substitution_repacking_selection is None:
-        move_map.set_bb(True)
-        move_map.set_chi(True)
-    elif substitution_repacking_selection is False:
-        move_map.set_bb(False)
-        move_map.set_chi(False)
-    if len(ligand_res_indices) > 0:
-        for ligand_pose_id in ligand_res_indices:
-            edge = pose.fold_tree().get_residue_edge(ligand_pose_id)
-            if not edge.is_jump():
-                raise Exception("Edge of the ligand is not a jump edge.")
-            move_map.set_jump(edge.label(), True)
+    static_selection = ResidueIndexSelector(",".join(str(static_position) \
+            for static_position in static_positions) + ",")
+    if only_minimize_neighborhood:
+        if focus_selection:
+            minimization_selection = select_neighborhood_region(focus_selection, True)
+            if len(static_positions) > 0:
+                minimization_selection = AndResidueSelector(minimization_selection, \
+                        NotResidueSelector(static_selection))
+            if ddG_ref_pose: # Pass residue indices vectors to the movemap.
+                minimization_vector = minimization_selection.apply(ddG_ref_pose)
+                move_map.set_bb(minimization_vector)
+                move_map.set_chi(minimization_vector)
+            else: # Pass residue selectors to a movemap factory. Under development.
+                minimization_vector = minimization_selection.apply(pose)
+                move_map.set_bb(minimization_vector)
+                move_map.set_chi(minimization_vector)
+        elif focus_selection is None:
+            raise Exception("Using -min_nbh is not allowed without using -rpk_nbh at the same time.")
+        elif focus_selection is False:
+            move_map.set_bb(False)
+            move_map.set_chi(False)
+    else:
+        if len(static_positions) > 0:
+            minimization_selection = NotResidueSelector(static_selection)
+            move_map.set_bb(minimization_selection.apply(pose))
+            move_map.set_chi(minimization_selection.apply(pose))
+        else:
+            move_map.set_bb(True)
+            move_map.set_chi(True)
+    for jump_edge in jump_edges:
+        move_map.set_jump(jump_edge, True)
     return move_map
 
 def create_fast_relax_mover(score_function, task_factory, move_map=None):
@@ -430,14 +526,10 @@ def calculate_energy(score_function, pose, selector=None, score_type=None):
         metric.set_residue_selector(selector)
     return metric.calculate(pose)
 
-def run_job_distributor(pose, score_function, decoys, name, annotated_name, *movers):
-    if decoys:
-        job_distributor = PyJobDistributor(name, decoys, score_function)
-    else:
-        job_distributor = PyJobDistributor(name, 5, score_function)
+def run_job_distributor(pose, score_function, name, annotated_name, *movers, n_decoys=50):
+    job_distributor = PyJobDistributor(name, n_decoys, score_function)
     pdb_name = job_distributor.pdb_name
     while not job_distributor.job_complete:
-        current_id = job_distributor.current_id
         pose_copy = Pose(pose)
         for mover in movers:
             mover.apply(pose_copy)
@@ -448,7 +540,9 @@ def run_job_distributor(pose, score_function, decoys, name, annotated_name, *mov
                 res = pose_copy.sequence()[index]
                 if res != wt_res:
                     mutations_str += "_" + wt_res + str(index) + res
-            os.rename(pdb_name + "_" + str(current_id) + ".pdb", pdb_name + "_" + str(current_id) + mutations_str + ".pdb")
+            current_id = job_distributor.current_id
+            os.rename(pdb_name + "_" + str(current_id) + ".pdb", \
+                    pdb_name + "_" + str(current_id) + mutations_str + ".pdb")
 
 def main(args):
     pose = pose_from_pdb(args.pdb)
@@ -467,80 +561,105 @@ def main(args):
     for chi in args.chi_dihedrals:
         chi_info = chi.split(",")
         pose.set_chi(int(chi_info[0]), int(chi_info[1]), float(chi_info[2]))
-    # Applying symmetry if specified
+    # Applying the symmetry if specified.
     set_symmetry(args.symmetry, [pose, coord_ref_pose, ddG_ref_pose])
-    # create score function
-    score_function = set_score_function(args.score_function, symmetry=args.symmetry, score_terms=args.score_terms)
-    # get pose index of the substrate and catalytic residues
-    theozyme_positions = set() # including substrates and catalytic residues
-    if args.enzyme_design_constraints:
-        pdb_info = pose.pdb_info()
-        match_substrate_pose_indices, match_res_pose_indices = get_match_pose_indices(pdb_info, args.pdb, args.symmetry)
-        match_indices = set(match_substrate_pose_indices + match_res_pose_indices)
-        theozyme_positions.update(match_index for match_index in match_indices)
-    if args.substrates:
-        substrate_pose_indices = pdb_to_pose_numbering(pose, args.substrates)
-        theozyme_positions.update(substrate_pose_indices)
-    # constraint
+    # Create the score function.
+    score_function = set_score_function(args.score_function, \
+            symmetry=args.symmetry, score_terms=args.score_terms)
+    # Add constraint files from the command line.
     if args.constraints:
         add_fa_constraints_from_cmdline(pose, score_function)
-    # enzyme design constraint
-    if args.enzyme_design_constraints:
-        enzdes_cst = create_enzdes_cst()
-        enzdes_cst.apply(pose)
-    # define rmsd mover
-    if args.no_rmsd_residues:
-        no_rmsd_residues = pdb_to_pose_numbering(pose, args.no_rmsd_residues)
-        rmsd_metric = RMSDMetric(pose, NotResidueSelector(ResidueIndexSelector(",".join(str(res) for res in no_rmsd_residues))))
-    else:
-        rmsd_metric = RMSDMetric(pose)
-    # native amino acid type
-    if args.favor_native_residue and (args.design_positions or args.design_active_site):
-        favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
-        favor_nataa.apply(pose)
-    # pre minimization
-    if args.pre_minimization and args.substrate_rigid_body_transformations and len(theozyme_positions) > 0:
-        pre_minimizer = pre_minimization(pose, theozyme_positions)
-        pre_minimizer.apply(pose)
-    # convert pdb numbering to pose numbering
-    mutation_pose_indices = pdb_to_pose_numbering(pose, args.mutations)
-    design_pose_indices = pdb_to_pose_numbering(pose, args.design_positions)
-    # create task factory
-    task_factory, substitution_repacking_selection = create_task_factory(point_mutations = mutation_pose_indices, design_positions = design_pose_indices, \
-            theozyme_positions = theozyme_positions, design_active_site = args.design_active_site, \
-            repacking_range = args.repack_interface_only, ddG_ref_pose = ddG_ref_pose, no_cystine = args.no_cystine, \
-            noncanonical_amino_acids = args.noncanonical_amino_acids)
-    # coordinate constraint
+    # Add coordinate constraints.
     if len(args.no_coordinate_constraint_residues) > 0:
         no_coord_cst_residues = pdb_to_pose_numbering(pose, args.no_coordinate_constraint_residues)
-        no_coord_cst_selection = ResidueIndexSelector(",".join(str(no_coord_cst_res) for no_coord_cst_res in no_coord_cst_residues))
+        no_coord_cst_selection = ResidueIndexSelector(",".join(str(no_coord_cst_res) \
+                for no_coord_cst_res in no_coord_cst_residues))
     else:
-        no_coord_cst_selection = False # All residues are restrained.
-    if args.no_optimization_region_coordinate_constraint:
-        if substitution_repacking_selection:
-            if no_coord_cst_selection:
-                no_coord_cst_selection = OrResidueSelector(no_coord_cst_selection, substitution_repacking_selection)
-            else:
-                no_coord_cst_selection = substitution_repacking_selection
-        elif substitution_repacking_selection is None:
-            no_coord_cst_selection = None # Nothing is restrained.
+        no_coord_cst_selection = False
     coord_cst_gen = create_coord_cst(coord_ref_pose = coord_ref_pose, \
-            coord_boundary = args.coordinate_constraint_bounded_width, no_coord_cst_selection = no_coord_cst_selection)
+            coord_boundary = args.coordinate_constraint_bounded_width, \
+            no_coord_cst_selection = no_coord_cst_selection)
     add_csts = AddConstraints()
     add_csts.add_generator(coord_cst_gen)
     add_csts.apply(pose)
-    # create move map
-    if not args.minimize_interface_only:
-        substitution_repacking_selection = None
-    all_substrate_pose_indices = set()
-    if args.substrate_rigid_body_transformations and (args.substrates or args.enzyme_design_constraints):
+    # Add enzyme design constraints.
+    if args.enzyme_design_constraints:
+        enzdes_cst = create_enzdes_cst()
+        enzdes_cst.apply(pose)
+    # Create the RMSD metric.
+    if args.no_rmsd_residues:
+        no_rmsd_residues = pdb_to_pose_numbering(pose, args.no_rmsd_residues)
+        rmsd_metric = RMSDMetric(pose, NotResidueSelector(ResidueIndexSelector(\
+                ",".join(str(res) for res in no_rmsd_residues))))
+    else:
+        rmsd_metric = RMSDMetric(pose)
+    # Favor native AA types.
+    if args.favor_native_residue and (args.design_positions or args.design_binding_site):
+        favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
+        favor_nataa.apply(pose)
+    # Get pose indices of substrates and catalytic residues.
+    theozyme_pose_indices = set()
+    if args.enzyme_design_constraints:
+        pdb_info = pose.pdb_info()
+        match_substrate_pose_indices, match_res_pose_indices = \
+                get_match_pose_indices(pdb_info, args.pdb, args.symmetry)
+        match_indices = match_substrate_pose_indices.union(match_res_pose_indices)
+        theozyme_pose_indices.update(match_index for match_index in match_indices)
+    if args.substrates:
+        substrate_pose_indices = pdb_to_pose_numbering(pose, args.substrates)
+        theozyme_pose_indices.update(substrate_pose_indices)
+    if args.catalytic_residues:
+        catalytic_residue_pose_indices = pdb_to_pose_numbering(pose, args.catalytic_residues)
+        theozyme_pose_indices.update(catalytic_residue_pose_indices)
+    # Convert pdb numberings to pose numberings.
+    static_pose_indices = pdb_to_pose_numbering(pose, args.static_positions)
+    mutation_pose_indices = pdb_to_pose_numbering(pose, args.mutations)
+    design_pose_indices = pdb_to_pose_numbering(pose, args.design_positions)
+    # Rigid body transformations.
+    rigid_body_tform_pose_indices = set()
+    if args.substrate_rigid_body_transformations:
         if args.substrates:
-            all_substrate_pose_indices.update(substrate_pose_indices)
+            rigid_body_tform_pose_indices.update(substrate_pose_indices)
         if args.enzyme_design_constraints:
-            all_substrate_pose_indices.update(match_substrate_pose_indices)
-    move_map = create_move_map(pose, substitution_repacking_selection = substitution_repacking_selection, ddG_ref_pose = ddG_ref_pose, ligand_res_indices = all_substrate_pose_indices)
-    # create fast relax mover
+            rigid_body_tform_pose_indices.update(match_substrate_pose_indices)
+    rigid_body_tform_pose_indices = rigid_body_tform_pose_indices - static_pose_indices
+    free_jump_edges = get_jump_edges(pose.fold_tree(), rigid_body_tform_pose_indices)
+    # Perform pre-minimization.
+    free_theozyme_pose_indices = theozyme_pose_indices - static_pose_indices
+    if args.pre_minimization and len(free_theozyme_pose_indices) > 0:
+        pre_minimizer = pre_minimization(pose, free_theozyme_pose_indices, jump_edges=free_jump_edges)
+        pre_minimizer.apply(pose)
+    # Create the task factory.
+    task_factory, substitution_repacking_selection = create_task_factory(\
+            static_positions = static_pose_indices, point_mutations = mutation_pose_indices, \
+            design_positions = design_pose_indices, theozyme_positions = theozyme_pose_indices, \
+            design_binding_site = args.design_binding_site, only_repack_neighborhood = args.repack_neighborhood_only, \
+            ddG_ref_pose = ddG_ref_pose, excluded_amino_acid_types = args.excluded_amino_acid_types, \
+            noncanonical_amino_acids = args.noncanonical_amino_acids)
+    # Create the move map.
+    move_map = create_move_map(pose, focus_selection = substitution_repacking_selection, \
+            only_minimize_neighborhood = args.minimize_neighborhood_only, \
+            static_positions = static_pose_indices, ddG_ref_pose = ddG_ref_pose, \
+            jump_edges = free_jump_edges)
+    # Create the fast relax mover.
     fr = create_fast_relax_mover(score_function, task_factory, move_map = move_map)
+    # Update coordinate constraints. Under development.
+    if args.no_coordinate_constraint_on_optimization_region:
+        if substitution_repacking_selection:
+            if no_coord_cst_selection:
+                no_coord_cst_selection = OrResidueSelector(\
+                        no_coord_cst_selection, substitution_repacking_selection)
+            else:
+                no_coord_cst_selection = substitution_repacking_selection
+        elif substitution_repacking_selection is None:
+            no_coord_cst_selection = None
+    coord_cst_gen = create_coord_cst(coord_ref_pose = coord_ref_pose, \
+            coord_boundary = args.coordinate_constraint_bounded_width, \
+            no_coord_cst_selection = no_coord_cst_selection)
+    add_csts = AddConstraints()
+    add_csts.add_generator(coord_cst_gen)
+    add_csts.apply(pose)
+    # Run jobs.
     name = args.pdb.split("/")[-1][:-4]
     if args.debug_mode:
         print(pose.fold_tree())
@@ -550,7 +669,8 @@ def main(args):
         print(task_factory.create_task_and_apply_taskoperations(pose))
         print(move_map)
     else:
-        run_job_distributor(pose, score_function, args.decoys, name, args.annotated_name, fr, rmsd_metric)
+        run_job_distributor(pose, score_function, name, args.annotated_name, \
+                fr, rmsd_metric, n_decoys=args.n_decoys)
 
 
 if __name__ == "__main__":
