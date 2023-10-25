@@ -268,25 +268,32 @@ def alter_fold_tree_jump_edges(fold_tree, alter_jump_edges):
         else:
             raise Exception("An alter edge list should contain 3 or 4 elements.")
     edge_strings = list()
+    new_jump_edge_label = 0
     for edge_str in fold_tree.to_string().split("EDGE")[1:]:
-        edge = tuple(filter(lambda x: x != "", edge_str.strip(" ").split(" ")))
-        downstream_residue = int(edge[1])
-        edge_label = fold_tree.get_residue_edge(downstream_residue).label()
-        alter_jump_edge = alter_jump_edges_dict.get(edge_label)
-        if alter_jump_edge:
-            upstream_edge_label = alter_jump_edge[0]
-            if upstream_edge_label < 0:
-                upstream_edge_label = jump_edge_labels[upstream_edge_label]
-            if upstream_edge_label == 0:
-                upstream_residue = int(edge[0])
-            else:
-                upstream_residue = fold_tree.jump_edge(upstream_edge_label).stop()
-            if len(alter_jump_edge) == 1:
-                edge = (str(upstream_residue), str(downstream_residue), str(edge_label))
-            elif len(alter_jump_edge) == 3:
-                edge = (str(upstream_residue), str(downstream_residue), \
-                        alter_jump_edge[1], alter_jump_edge[2])
-        edge_strings.append(",".join(edge))
+        edge_info = tuple(filter(lambda x: x != "", edge_str.strip(" ").split(" ")))
+        downstream_residue = int(edge_info[1])
+        edge = fold_tree.get_residue_edge(downstream_residue)
+        if edge.is_jump():
+            upstream_residue = int(edge_info[0])
+            edge_label = edge.label()
+            assert edge_label == int(edge_info[2])
+            new_jump_edge_label += 1
+            alter_jump_edge = alter_jump_edges_dict.get(edge_label)
+            if alter_jump_edge:
+                upstream_edge_label = alter_jump_edge[0]
+                if upstream_edge_label < 0:
+                    upstream_edge_label = jump_edge_labels[upstream_edge_label]
+                if upstream_edge_label > 0:
+                    upstream_residue = fold_tree.jump_edge(upstream_edge_label).stop()
+                if len(alter_jump_edge) == 1:
+                    edge_info = (str(upstream_residue), str(downstream_residue), str(new_jump_edge_label))
+                elif len(alter_jump_edge) == 3:
+                    edge_info = (str(upstream_residue), str(downstream_residue), \
+                            alter_jump_edge[1], alter_jump_edge[2])
+                    new_jump_edge_label -= 1
+            elif new_jump_edge_label < edge_label:
+                edge_info = (str(upstream_residue), str(downstream_residue), str(new_jump_edge_label))
+        edge_strings.append(",".join(edge_info))
     return create_fold_tree(edge_strings)
 
 def set_chi_dihedral(pose, chi_dihedrals):
