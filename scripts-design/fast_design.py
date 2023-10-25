@@ -762,7 +762,7 @@ def read_energies_from_pdb(pdb_path, substrate_identities):
 def run_jobs(pose, score_function, *movers, n_decoys=5, theozyme_positions:set=set(), \
         output_filename=None):
     if not output_filename:
-        output_filename = pose.pdb_info().name()
+        output_filename = pose.pdb_info().name().split("/")[-1][:-4]
     finished_decoys = 0
     already_finished = False
     if os.path.isfile(output_filename + ".pdb"):
@@ -814,7 +814,7 @@ def run_jobs(pose, score_function, *movers, n_decoys=5, theozyme_positions:set=s
 def run_job_distributor(pose, score_function, *movers, n_decoys=50, \
         output_filename_prefix:str=None, annotated_name:str=None):
     if not output_filename_prefix:
-        output_filename_prefix = pose.pdb_info().name()
+        output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
     job_distributor = PyJobDistributor(output_filename_prefix, n_decoys, score_function)
     while not job_distributor.job_complete:
         pose_copy = Pose(pose)
