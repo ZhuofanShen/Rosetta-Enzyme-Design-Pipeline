@@ -44,7 +44,7 @@ def parse_arguments():
     parser.add_argument("-optH", "--optimize_protonation_state", action="store_true")
     parser.add_argument("-ft", "--fold_tree", type=str, nargs="*")
     parser.add_argument("-edges", "--alter_jump_edges", type=str, nargs="*", help=\
-            "$edge,$atom1,$atom2 or $edge,$upstream_edge or $edge,$upstream_edge,$atom1,$atom2 * n")
+            "[$edge,$atom1,$atom2] or [$edge,$upstream_edge] or [$edge,$upstream_edge,$atom1,$atom2] * n")
     parser.add_argument("-chis", "--chi_dihedrals", type=str, nargs="*", default=list(), \
             help="$chain$residue_index,$chi,$degree or $residue_name3,$chi,$degree")
     parser.add_argument("-symm", "--symmetry", type=str)
@@ -252,7 +252,7 @@ def alter_fold_tree_jump_edges(fold_tree, alter_jump_edges):
     jump_edge_labels = list(range(1, fold_tree.num_jump() + 1))
     alter_jump_edges_dict = dict()
     for alter_jump_edge in alter_jump_edges:
-        alter_jump_edge = alter_jump_edge.split(",")
+        alter_jump_edge = alter_jump_edge.strip("[").strip("]").split(",")
         jump_edge_label = int(alter_jump_edge[0])
         if jump_edge_label < 0:
             jump_edge_label = jump_edge_labels[jump_edge_label]
@@ -275,6 +275,8 @@ def alter_fold_tree_jump_edges(fold_tree, alter_jump_edges):
         alter_jump_edge = alter_jump_edges_dict.get(edge_label)
         if alter_jump_edge:
             upstream_edge_label = alter_jump_edge[0]
+            if upstream_edge_label < 0:
+                upstream_edge_label = jump_edge_labels[upstream_edge_label]
             if upstream_edge_label == 0:
                 upstream_residue = int(edge[0])
             else:
