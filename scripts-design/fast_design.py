@@ -541,10 +541,10 @@ def select_neighborhood_region(focus_selection, include_focus: bool, method="vec
     return neighborhood_selection
 
 def pre_minimization(pose, pre_min_positions, jump_edges:set=set()):
-    pre_minimization_selector = ResidueIndexSelector(",".join(pre_min_positions))
+    pre_minimization_selection = ResidueIndexSelector(",".join(pre_min_positions))
     move_map = MoveMap()
     move_map.set_bb(False)
-    move_map.set_chi(pre_minimization_selector.apply(pose))
+    move_map.set_chi(pre_minimization_selection.apply(pose))
     for jump_edge in jump_edges:
         move_map.set_jump(jump_edge, True)
     pre_minimizer = MinMover()
@@ -773,26 +773,15 @@ def create_fast_relax_mover(score_function, task_factory, move_map=None):
         fast_relax.set_movemap(move_map)
     return fast_relax
 
-def calculate_energy(score_function, pose, selector=None, score_type:str=None):
+def calculate_energy(score_function, pose, calculate_energy_selection=None, score_type:str=None):
     # Create the metric
     metric = TotalEnergyMetric()
     metric.set_scorefunction(score_function)
     if score_type:
         exec("metric.set_scoretype(ScoreType.{})".format(score_type))
     # Add the selector
-    if selector:
-        metric.set_residue_selector(selector)
-    return metric.calculate(pose)
-
-def calculate_energy(score_function, pose, selector=None, score_type:str=None):
-    # Create the metric
-    metric = TotalEnergyMetric()
-    metric.set_scorefunction(score_function)
-    if score_type:
-        exec("metric.set_scoretype(ScoreType.{})".format(score_type))
-    # Add the selector
-    if selector:
-        metric.set_residue_selector(selector)
+    if calculate_energy_selection:
+        metric.set_residue_selector(calculate_energy_selection)
     return metric.calculate(pose)
 
 def read_energies_from_pdb(pdb_path, substrate_identities):
@@ -849,9 +838,10 @@ def run_jobs(pose, score_function, *movers, n_decoys=5, theozyme_positions:set=s
             dG_total = calculate_energy(score_function, best_decoy) - \
                     calculate_energy(score_function, best_decoy, score_type="coordinate_constraint")
             if len(theozyme_positions) > 0:
-                substrate_selector = ResidueIndexSelector(",".join(theozyme_positions))
-                dG_substrate = calculate_energy(score_function, best_decoy, selector=substrate_selector) - \
-                        calculate_energy(score_function, best_decoy, selector=substrate_selector, score_type="coordinate_constraint")
+                substrate_selection = ResidueIndexSelector(",".join(theozyme_positions))
+                dG_substrate = calculate_energy(score_function, best_decoy, \
+                        selection=substrate_selection) - calculate_energy(score_function, best_decoy, \
+                        selection=substrate_selection, score_type="coordinate_constraint")
     if not already_finished:
         os.rename(output_filename + "." + str(decoy) + ".in_progress.pdb", output_filename + ".pdb")
     if len(theozyme_positions) > 0:
@@ -1043,7 +1033,7 @@ def main(args):
         print(score_function.show(pose))
     elif args.no_save_decoys:
         run_jobs(pose, score_function, fr, rmsd_metric, n_decoys=5, \
-                theozyme_positions=theozyme_pose_indices, \
+                theozyme_positions=nonredundant_theozyme_pose_indices, \
                 output_filename=args.output_filename_prefix)
     else:
         run_job_distributor(pose, score_function, fr, rmsd_metric, \
