@@ -784,7 +784,7 @@ def calculate_energy(score_function, pose, calculate_energy_selection=None, scor
         metric.set_residue_selector(calculate_energy_selection)
     return metric.calculate(pose)
 
-def read_energies_from_pdb(pdb_path, substrate_identities):
+def read_energies_from_pdb(pdb_path, theozyme_positions:set=set()):
     dG_substrate = None
     with open(pdb_path, "r") as pf:
         for line in pf:
@@ -794,7 +794,7 @@ def read_energies_from_pdb(pdb_path, substrate_identities):
                 scores = line[:-1].split(" ")
                 dG_total = float(scores[score_terms.index("total")]) - \
                         float(scores[score_terms.index("coordinate_constraint")])
-            elif line[:3] in substrate_identities:
+            elif line.split(" ")[0].split("_")[-1] in theozyme_positions:
                 dG_substrate += float(line[:-1].split(" ")[-1])
     return dG_total, dG_substrate
 
@@ -807,13 +807,15 @@ def run_jobs(pose, score_function, *movers, n_decoys=5, theozyme_positions:set=s
     if os.path.isfile(output_filename + ".pdb"):
         already_finished = True
         finished_decoys = n_decoys
-        dG_total, dG_substrate = read_energies_from_pdb(output_filename + ".pdb")
+        dG_total, dG_substrate = read_energies_from_pdb(output_filename + ".pdb", \
+                theozyme_positions=theozyme_positions)
     else:
         for decoy in range(1, n_decoys + 1):
             checkpoint = output_filename + "." + str(decoy) + ".in_progress.pdb"
             if os.path.isfile(checkpoint):
                 finished_decoys = decoy
-                dG_total, dG_substrate = read_energies_from_pdb(checkpoint)
+                dG_total, dG_substrate = read_energies_from_pdb(checkpoint, \
+                        theozyme_positions=theozyme_positions)
     for decoy in range(finished_decoys + 1, n_decoys + 1):
         pose_copy = Pose(pose)
         for mover in movers:
@@ -837,6 +839,7 @@ def run_jobs(pose, score_function, *movers, n_decoys=5, theozyme_positions:set=s
         if dG_total == None:
             dG_total = calculate_energy(score_function, best_decoy) - \
                     calculate_energy(score_function, best_decoy, score_type="coordinate_constraint")
+            dG_substrate = None
             if len(theozyme_positions) > 0:
                 substrate_selection = ResidueIndexSelector(",".join(theozyme_positions))
                 dG_substrate = calculate_energy(score_function, best_decoy, \
@@ -844,12 +847,11 @@ def run_jobs(pose, score_function, *movers, n_decoys=5, theozyme_positions:set=s
                         selection=substrate_selection, score_type="coordinate_constraint")
     if not already_finished:
         os.rename(output_filename + "." + str(decoy) + ".in_progress.pdb", output_filename + ".pdb")
-    if len(theozyme_positions) > 0:
-        with open(output_filename + ".dat", "w") as pf:
-            pf.write(str(dG_total) + "\n" + str(dG_substrate) + "\n")
-    else:
-        with open(output_filename + ".dat", "w") as pf:
-            pf.write(str(dG_total) + "\n")
+    with open(output_filename + ".dat", "w") as pf:
+        pf.write(str(dG_total) + "\n")
+    if dG_substrate:
+        with open(output_filename + ".dat", "a") as pf:
+            pf.write(str(dG_substrate) + "\n")
 
 def run_job_distributor(pose, score_function, *movers, n_decoys=50, \
         output_filename_prefix:str=None, annotated_name:str=None):
