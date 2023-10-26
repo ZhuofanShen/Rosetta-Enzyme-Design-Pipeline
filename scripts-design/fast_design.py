@@ -33,6 +33,7 @@ from pyrosetta.rosetta.protocols.protein_interface_design \
 from pyrosetta.rosetta.protocols.minimization_packing import \
     PackRotamersMover, MinMover
 from pyrosetta.rosetta.protocols.relax import FastRelax
+from pyrosetta.rosetta.protocols.simple_moves import MutateResidue
 from pyrosetta.rosetta.protocols.symmetry import SetupForSymmetryMover
 
 def parse_arguments():
@@ -89,7 +90,7 @@ def parse_arguments():
     parser.add_argument("-noaa", "--excluded_amino_acid_types", type=str, \
             help="String of one-letter AA codes.")
     parser.add_argument("-ncaa", "--noncanonical_amino_acids", type=str, nargs="*", \
-            default=list(), help="name3")
+            default=list(), help="$name1,$name3")
     parser.add_argument("-rpk_nbh", "--repack_neighborhood_only", action="store_true")
     parser.add_argument("-no_rpk_bs", "--no_repack_binding_site", action="store_true")
     parser.add_argument("-no_rpk_enzdes", "--no_repack_enzdes_shell", action="store_true")
@@ -552,7 +553,7 @@ def pre_minimization(pose, pre_min_positions, jump_edges:set=set()):
     pre_minimizer.movemap(move_map)
     return pre_minimizer
 
-def create_task_factory(static_positions:set=set(), \
+def create_task_factory(nopack_positions:set=set(), \
         point_mutations:set=set(), design_positions:set=set(), \
         theozyme_positions:set=set(), enzdes_positions:set=set(), \
         design_binding_site:bool=False, design_enzdes_shell:bool=False, \
@@ -562,150 +563,166 @@ def create_task_factory(static_positions:set=set(), \
         excluded_amino_acid_types:str=None, noncanonical_amino_acids:list=None):
     """
     Priority:
-        1. Freeze static residues.
+        1. No pack residues.
         2. Introduce point mutations.
         3. Perform site-directed design.
         4. Design protein-ligand interfaces.
     """
-    # Create a task factory.
-    task_factory = TaskFactory()
-    if noncanonical_amino_acids:
-        ncaa_palette = CustomBaseTypePackerPalette()
-        for ncaa in noncanonical_amino_acids:
-            ncaa_palette.add_type(ncaa)
-        task_factory.set_packer_palette(ncaa_palette)
 
-    # Every position is designable by defalut other than explicit specification.
+    task_factory = TaskFactory()
     task_factory.push_back(IncludeCurrent())
     task_factory.push_back(ExtraRotamers(0, 1, 1))
     task_factory.push_back(ExtraRotamers(0, 2, 1))
 
+    # Compatible with noncanonical amino acids.
+    AA_1to3_dict = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", \
+            "G": "GLY", "H": "HIS", "I": "ILE", "K": "LYS", "L": "LEU", \
+            "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG", \
+            "S": "SER", "T": "THR", "V": "VAL", "W": "TRP", "Y": "TYR"}
+    if noncanonical_amino_acids:
+        ncaa_palette = CustomBaseTypePackerPalette()
+        for ncaa in noncanonical_amino_acids:
+            ncaa_name1, ncaa_name3 = ncaa.split(",")
+            AA_1to3_dict[ncaa_name1] = ncaa_name3
+            ncaa_palette.add_type(ncaa_name3)
+        if len(design_positions) > 0 or design_binding_site or design_enzdes_shell:
+            task_factory.set_packer_palette(ncaa_palette)
+
     # Site-directed AA substitutions positions.
+    # Repack its surrounding shell w/o including the focus region itself.
     site_directed_substitution_positions = set()
 
+    # Repack its surrounding shell along with the focus region itself if not static.
+    repack_shell_focus_positions = set()
+
     # Specify the point mutations.
+    mutators = list()
     mutation_positions = set()
+    site_directed_ncAA_positions = set()
+    canonical_AAs = set("ACDEFGHIKLMNPQRSTVWY")
     for point_mutation in point_mutations:
-        mutating_position, target_aa = point_mutation.split(",")
-        if not mutating_position in static_positions:
+        mutating_position, target_AA = point_mutation.split(",")
+        if target_AA not in AA_1to3_dict.keys():
+            raise Exception("Specified AA type " + target_AA + " is not declared in -ncaa.")
+        point_mutation_selection = ResidueIndexSelector(mutating_position)
+        if mutating_position in nopack_positions or not target_AA in canonical_AAs:
+            mutator = MutateResidue()
+            mutator.set_selector(point_mutation_selection)
+            target_AA_name3 = AA_1to3_dict[target_AA]
+            mutator.set_res_name(target_AA_name3)
+            mutators.append(mutator)
+            repack_shell_focus_positions.add(mutating_position)
+            if not mutating_position in nopack_positions:
+            # Repack the introduced noncanonical AA.
+                site_directed_ncAA_positions.add(mutating_position)
+        else:
             restriction = RestrictAbsentCanonicalAASRLT()
-            restriction.aas_to_keep(target_aa)
+            restriction.aas_to_keep(target_AA)
             task_factory.push_back(OperateOnResidueSubset(restriction, \
-                    ResidueIndexSelector(mutating_position)))
-            mutation_positions.add(mutating_position)
+                    point_mutation_selection))
+        mutation_positions.add(mutating_position)
     site_directed_substitution_positions.update(mutation_positions)
 
     # Select the design positions.
     design_selection = OrResidueSelector()
     # Specify the site-directed design positions.
-    if len(static_positions) > 0:
-        design_positions = design_positions - static_positions
-    if len(mutation_positions) > 0:
-        design_positions = design_positions - mutation_positions
-    if len(design_positions) > 0:
-        site_directed_design_selection = ResidueIndexSelector(",".join(design_positions))
-        design_selection.add_residue_selector(site_directed_design_selection)
+    design_positions = design_positions - mutation_positions
+    if len(design_positions.intersection(nopack_positions)) > 0:
+        raise Exception("Site-directed design positions cannot contain nopack positions.")
+    site_directed_design_selection = ResidueIndexSelector(",".join(design_positions) + ",")
+    design_selection.add_residue_selector(site_directed_design_selection)
     site_directed_substitution_positions.update(design_positions)
 
-    # Site-directed AA substitutions positions.
+    # Site-directed AA substitutions positions. May include nopack positions or NCAA mutations.
     substitution_selection = ResidueIndexSelector(",".join(site_directed_substitution_positions) + ",")
-    # Exclude the AA substitutions and static positions from repacking.
-    substitution_static_selection = ResidueIndexSelector(",".join(\
-            site_directed_substitution_positions.union(static_positions)) + ",")
-    
-    # May contain site-directed substitution positions or static positions or 
-    # redundant ddG_ref_pose positions.
-    design_shell_focus_theozyme_positions = set()
-    repack_shell_focus_theozyme_positions = set()
-    repack_theozyme_positions = set()
-    if args.design_binding_site:
-        design_shell_focus_theozyme_positions.update(theozyme_positions)
-    if not args.no_repack_binding_site:
-        repack_shell_focus_theozyme_positions.update(theozyme_positions)
-    else:
-        repack_theozyme_positions.update(theozyme_positions)
-    if args.design_enzdes_shell:
-        design_shell_focus_theozyme_positions.update(enzdes_positions)
-    if not args.no_repack_enzdes_shell:
-        repack_shell_focus_theozyme_positions.update(enzdes_positions)
-    else:
-        repack_theozyme_positions.update(enzdes_positions)
-    design_shell_focus_theozyme_selection = ResidueIndexSelector(",".join(\
-            design_shell_focus_theozyme_positions) + ",")
-    repack_shell_focus_theozyme_selection = ResidueIndexSelector(",".join(\
-            repack_shell_focus_theozyme_positions) + ",")
-    repack_theozyme_selection = ResidueIndexSelector(",".join(repack_theozyme_positions) + ",")
+
+    # Design its surrounding shell and repack the focus region itself.
+    design_shell_focus_positions = set()
+    if design_binding_site:
+        design_shell_focus_positions.update(theozyme_positions)
+    if design_enzdes_shell:
+        design_shell_focus_positions.update(enzdes_positions)
+    # Repack its surrounding shell along with the focus region itself.
+    if repack_binding_site:
+        repack_shell_focus_positions.update(theozyme_positions)
+    if repack_enzdes_shell:
+        repack_shell_focus_positions.update(enzdes_positions)
+    # Repack this region in addition to the surrounding shell repack region.
+    additional_repacking_positions = theozyme_positions.union(enzdes_positions)
+    # The following 3 selections may contain site-directed substitution positions 
+    # or nopack positions or redundant ddG_ref_pose positions. Use with caution.
+    design_shell_focus_selection = ResidueIndexSelector(",".join(\
+            design_shell_focus_positions) + ",")
+    repack_shell_focus_selection = ResidueIndexSelector(",".join(\
+            repack_shell_focus_positions) + ",")
+    additional_repacking_selection = ResidueIndexSelector(",".join(\
+            additional_repacking_positions) + ",")
 
     # Design the theozyme-protein interface.
-    if len(design_shell_focus_theozyme_positions) > 0:
-        design_shell_selection = select_neighborhood_region(design_shell_focus_theozyme_selection, False)
-        design_shell_selection = AndResidueSelector(design_shell_selection, \
-                NotResidueSelector(substitution_static_selection))
-        if ddG_ref_pose is not None:
-            # Fix the design positions and truncate redundant ddG_ref_pose positions.
-            binding_site_positions = boolean_vector_to_indices_set(\
-                    design_shell_selection.apply(ddG_ref_pose), \
-                    n_monomers=n_monomers, truncate_sequence_end=truncate_sequence_end)
-            design_shell_selection = ResidueIndexSelector(",".join(binding_site_positions) + ",")
-        design_selection.add_residue_selector(design_shell_selection)
-        substitution_selection = OrResidueSelector(substitution_selection, design_shell_selection)
-        substitution_static_selection = OrResidueSelector(substitution_static_selection, \
-                design_shell_selection)
+    design_shell_selection = select_neighborhood_region(design_shell_focus_selection, False)
+    # Exclude the site-directed AA substitutions and nopack positions from the design shell.
+    site_directed_substitution_nopack_selection = ResidueIndexSelector(",".join(\
+            site_directed_substitution_positions.union(nopack_positions)) + ",")
+    design_shell_selection = AndResidueSelector(design_shell_selection, \
+            NotResidueSelector(site_directed_substitution_nopack_selection))
+    if ddG_ref_pose is not None:
+        # Fix the design positions and truncate redundant ddG_ref_pose positions.
+        binding_site_positions = boolean_vector_to_indices_set(\
+                design_shell_selection.apply(ddG_ref_pose), \
+                n_monomers=n_monomers, truncate_sequence_end=truncate_sequence_end)
+        design_shell_selection = ResidueIndexSelector(",".join(binding_site_positions) + ",")
+    design_selection.add_residue_selector(design_shell_selection)
+    substitution_selection = OrResidueSelector(substitution_selection, design_shell_selection)
 
-    # Exclude some AA types if specified.
-    if excluded_amino_acid_types:
-        all_AAs = set("AGILPVFWYDERHKSTMNQ")
+    # Every position is designable by defalut in the task factory other than specification.
+    if excluded_amino_acid_types: # Exclude some AA types if specified.
         excluded_AAs = set(excluded_amino_acid_types)
-        restriction = RestrictAbsentCanonicalAASRLT(",".join(\
-                available_AA for available_AA in all_AAs - excluded_AAs))
+        restriction = RestrictAbsentCanonicalAASRLT(",".join(AA_1to3_dict.keys() - excluded_AAs))
         restriction.aas_to_keep()
         task_factory.push_back(OperateOnResidueSubset(restriction, design_selection))
 
-    # Identify the repack and static regions.
-    if len(mutation_positions) > 0 or len(design_positions) > 0 or \
-            len(repack_shell_focus_theozyme_positions) > 0:
-        if repack_neighborhood_only:
-            # Repack the neighborhood region of the AA substitutions and theozyme positions.
-            # min_shell_focus_pack_selection may contain static positions or 
-            # redundant ddG_ref_pose positions.
-            min_shell_focus_pack_selection = select_neighborhood_region(OrResidueSelector(\
-                    substitution_selection, repack_shell_focus_theozyme_selection), True)
-            min_shell_focus_pack_selection = OrResidueSelector(\
-                    min_shell_focus_pack_selection, repack_theozyme_selection)
-            if ddG_ref_pose is not None: # Fix the repacking positions.
-                focus_pack_rotamers_positions = boolean_vector_to_indices_set(\
-                        min_shell_focus_pack_selection.apply(ddG_ref_pose), \
-                        n_monomers=n_monomers)
-                min_shell_focus_pack_selection = ResidueIndexSelector(\
-                        ",".join(focus_pack_rotamers_positions) + ",")
-            # Exclude the AA substitutions and static positions from repacking.
-            repacking_selection = AndResidueSelector(min_shell_focus_pack_selection, \
-                    NotResidueSelector(substitution_static_selection))
-            if ddG_ref_pose is not None: # Truncate redundant ddG_ref_pose positions.
-                repacking_positions = boolean_vector_to_indices_set(\
-                        repacking_selection.apply(ddG_ref_pose), \
-                        n_monomers=n_monomers, truncate_sequence_end=truncate_sequence_end)
-                repacking_selection = ResidueIndexSelector(",".join(repacking_positions) + ",")
-            task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), repacking_selection))
-            # No repacking region.
-            task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), \
-                    OrResidueSelector(substitution_selection, repacking_selection), True))
+    # Exclude nopack positions from repacking.
+    nopack_selection = ResidueIndexSelector(",".join(nopack_positions) + ",")
+    # Need to exclude NCAA substitutions from the substitution selection when repacking.
+    # In other words, explicitly include NCAA substitutions in repacking.
+    cAA_substitution_selection = AndResidueSelector(substitution_selection, NotResidueSelector(\
+            ResidueIndexSelector(",".join(site_directed_ncAA_positions) + ",")))
+    if repack_neighborhood_only:
+        # Repack the neighborhood region of the AA substitutions and theozyme positions.
+        # min_shell_focus_selection may contain nopack positions or redundant ddG_ref_pose positions.
+        min_shell_focus_selection = select_neighborhood_region(OrResidueSelector(\
+                substitution_selection, repack_shell_focus_selection), True)
+        min_shell_focus_selection = OrResidueSelector(\
+                min_shell_focus_selection, additional_repacking_selection)
+        if ddG_ref_pose is not None:
+            # Fix the repacking positions.
+            min_shell_focus_positions = boolean_vector_to_indices_set(\
+                    min_shell_focus_selection.apply(ddG_ref_pose), \
+                    n_monomers=n_monomers)
+            min_shell_focus_selection = ResidueIndexSelector(\
+                    ",".join(min_shell_focus_positions) + ",")
+            # Filter out redundant ddG_ref_pose positions.
+            pack_positions = boolean_vector_to_indices_set(\
+                    min_shell_focus_selection.apply(ddG_ref_pose), \
+                    truncate_sequence_end=truncate_sequence_end) - nopack_positions
+            pack_selection = ResidueIndexSelector(",".join(pack_positions) + ",")
         else:
-            # Exclude the AA substitutions and static positions from repacking.
-            task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), \
-                    substitution_static_selection, True))
-            min_shell_focus_pack_selection = None
+            pack_selection = AndResidueSelector(min_shell_focus_selection, \
+                    NotResidueSelector(nopack_selection))
+        # Exclude the canonical AA substitutions and nopack positions from repacking.
+        repacking_selection = AndResidueSelector(pack_selection, NotResidueSelector(\
+                cAA_substitution_selection))
+        task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), repacking_selection))
+        # No repacking region.
+        task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), pack_selection, True))
     else:
-        if repack_neighborhood_only:
-            # Do not repack any part of the pose.
-            task_factory.push_back(PreventRepacking())
-            min_shell_focus_pack_selection = False
-        else:
-            # Exclude the static positions from the repacking region.
-            static_selection = ResidueIndexSelector(",".join(static_positions) + ",")
-            task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), static_selection, True))
-            min_shell_focus_pack_selection = None
-    return task_factory, min_shell_focus_pack_selection
+        # Exclude the canonical AA substitutions and nopack positions from repacking.
+        task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), \
+                OrResidueSelector(cAA_substitution_selection, nopack_selection), True))
+        task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), nopack_selection))
+        min_shell_focus_selection = None
+
+    return task_factory, mutators, min_shell_focus_selection
 
 def create_move_map(pose, focus_selection=None, minimize_neighborhood_only:bool=False, \
         static_positions:set=set(), ddG_ref_pose=None, n_monomers=1, \
@@ -737,11 +754,8 @@ def create_move_map(pose, focus_selection=None, minimize_neighborhood_only:bool=
                 minimization_vector = minimization_selection.apply(pose)
                 move_map.set_bb(minimization_vector)
                 move_map.set_chi(minimization_vector)
-        elif focus_selection is None:
+        else:
             raise Exception("Using -min_nbh is not allowed without using -rpk_nbh at the same time.")
-        elif focus_selection is False:
-            move_map.set_bb(False)
-            move_map.set_chi(False)
     else:
         if len(static_positions) > 0:
             minimization_selection = NotResidueSelector(static_selection)
@@ -948,7 +962,6 @@ def main(args):
     if args.substrate_identities:
         substrate_by_id_pose_indices = residue_name3_selector(pose, args.substrate_identities)
         theozyme_pose_indices.update(substrate_by_id_pose_indices)
-        nonredundant_theozyme_pose_indices = theozyme_pose_indices.copy()
         if args.substrate_rigid_body_transformations:
             rigid_body_tform_pose_indices.update(substrate_by_id_pose_indices)
         if args.ddG_reference_pdb:
@@ -967,11 +980,11 @@ def main(args):
         enzdes_pose_indices = enzdes_substrate_pose_indices.union(enzdes_res_pose_indices)
         if args.enzdes_substrates_transformations:
             rigid_body_tform_pose_indices.update(enzdes_substrate_pose_indices)
-    rigid_body_tform_pose_indices = rigid_body_tform_pose_indices - static_pose_indices
-    # Verify the redundant length of ddG_ref_pose.
-    assert len(theozyme_pose_indices.union(enzdes_pose_indices)) - \
-            len(nonredundant_theozyme_pose_indices) == truncate_sequence_end
+    # Get all theozyme positions.
+    nonredundant_theozyme_pose_indices = set(filter(lambda pose_index: pose_index \
+            <= sequence_length, theozyme_pose_indices.union(enzdes_pose_indices)))
     # Rigid body transformations.
+    rigid_body_tform_pose_indices = rigid_body_tform_pose_indices - static_pose_indices
     rigid_body_tform_jump_edges = set()
     if len(rigid_body_tform_pose_indices) > 0:
         rigid_body_tform_jump_edges = pose_indices_to_jump_edges(pose.fold_tree(), \
@@ -985,8 +998,8 @@ def main(args):
                 jump_edges=rigid_body_tform_jump_edges)
         pre_minimizer.apply(pose)
     # Create the task factory.
-    task_factory, min_shell_focus_pack_selection = create_task_factory(\
-            static_positions=static_pose_indices, \
+    task_factory, mutators, min_shell_focus_selection = create_task_factory(\
+            nopack_positions=static_pose_indices, \
             point_mutations=mutation_pose_indices, \
             design_positions=design_pose_indices, \
             theozyme_positions=theozyme_pose_indices, \
@@ -1000,8 +1013,10 @@ def main(args):
             truncate_sequence_end=truncate_sequence_end, \
             excluded_amino_acid_types=args.excluded_amino_acid_types, \
             noncanonical_amino_acids=args.noncanonical_amino_acids)
+    for mutator in mutators:
+        mutator.apply(pose)
     # Create the move map.
-    move_map = create_move_map(pose, focus_selection=min_shell_focus_pack_selection, \
+    move_map = create_move_map(pose, focus_selection=min_shell_focus_selection, \
             minimize_neighborhood_only=args.minimize_neighborhood_only, \
             static_positions=static_pose_indices, ddG_ref_pose=ddG_ref_pose, \
             n_monomers=n_monomers, truncate_sequence_end=truncate_sequence_end, \
@@ -1010,13 +1025,13 @@ def main(args):
     fr = create_fast_relax_mover(score_function, task_factory, move_map=move_map)
     # Update coordinate constraints. Under development.
     if args.no_coordinate_constraint_on_optimization_region:
-        if min_shell_focus_pack_selection:
+        if min_shell_focus_selection:
             if no_coord_cst_selection:
                 no_coord_cst_selection = OrResidueSelector(\
-                        no_coord_cst_selection, min_shell_focus_pack_selection)
+                        no_coord_cst_selection, min_shell_focus_selection)
             else:
-                no_coord_cst_selection = min_shell_focus_pack_selection
-        elif min_shell_focus_pack_selection is None:
+                no_coord_cst_selection = min_shell_focus_selection
+        elif min_shell_focus_selection is None:
             no_coord_cst_selection = None
         # Unload old coordinate constraints and add new coordinate constraints.
         coord_cst_gen = create_coord_cst(coord_ref_pose=coord_ref_pose, \
