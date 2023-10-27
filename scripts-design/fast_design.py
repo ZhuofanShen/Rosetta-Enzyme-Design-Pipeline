@@ -88,9 +88,10 @@ def parse_arguments():
             help="Enzdes shell AA design. Lower priority than -muts and -des.")
     parser.add_argument("-nataa", "--favor_native_residue", type=float)
     parser.add_argument("-noaa", "--excluded_amino_acid_types", type=str, \
-            help="String of one-letter AA codes.")
+            help="Concatenated string of excluded AA one-letter codes.")
     parser.add_argument("-ncaa", "--noncanonical_amino_acids", type=str, nargs="*", \
             default=list(), help="$name1,$name3")
+    parser.add_argument("-ncaa_des", "--allow_ncaa_in_design", action="store_true")
     parser.add_argument("-rpk_nbh", "--repack_neighborhood_only", action="store_true")
     parser.add_argument("-no_rpk_bs", "--no_repack_binding_site", action="store_true")
     parser.add_argument("-no_rpk_enzdes", "--no_repack_enzdes_shell", action="store_true")
@@ -560,7 +561,8 @@ def create_task_factory(nopack_positions:set=set(), \
         repack_neighborhood_only:bool=False, \
         repack_binding_site:bool=True, repack_enzdes_shell:bool=True, \
         ddG_ref_pose=None, n_monomers:int=1, truncate_sequence_end:int=0, \
-        excluded_amino_acid_types:str=None, noncanonical_amino_acids:list=None):
+        excluded_amino_acid_types:str=None, \
+        noncanonical_amino_acids:list=list(), allow_ncaa_in_design:bool=False):
     """
     Priority:
         1. No pack residues.
@@ -574,19 +576,21 @@ def create_task_factory(nopack_positions:set=set(), \
     task_factory.push_back(ExtraRotamers(0, 1, 1))
     task_factory.push_back(ExtraRotamers(0, 2, 1))
 
-    # Compatible with noncanonical amino acids.
+    # Compatible amino acid types.
     AA_1to3_dict = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", \
             "G": "GLY", "H": "HIS", "I": "ILE", "K": "LYS", "L": "LEU", \
             "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG", \
             "S": "SER", "T": "THR", "V": "VAL", "W": "TRP", "Y": "TYR"}
-    if noncanonical_amino_acids:
-        ncaa_palette = CustomBaseTypePackerPalette()
-        for ncaa in noncanonical_amino_acids:
-            ncaa_name1, ncaa_name3 = ncaa.split(",")
-            AA_1to3_dict[ncaa_name1] = ncaa_name3
-            ncaa_palette.add_type(ncaa_name3)
-        if len(design_positions) > 0 or design_binding_site or design_enzdes_shell:
-            task_factory.set_packer_palette(ncaa_palette)
+    all_AAs = set(AA_1to3_dict.keys())
+    # Include noncanonical amino acids.
+    ncaa_palette = CustomBaseTypePackerPalette()
+    for ncaa in noncanonical_amino_acids:
+        ncaa_name1, ncaa_name3 = ncaa.split(",")
+        AA_1to3_dict[ncaa_name1] = ncaa_name3
+        ncaa_palette.add_type(ncaa_name3)
+    if allow_ncaa_in_design:
+        all_AAs = set(AA_1to3_dict.keys())
+        task_factory.set_packer_palette(ncaa_palette)
 
     # Site-directed AA substitutions positions.
     # Repack its surrounding shell w/o including the focus region itself.
@@ -677,7 +681,7 @@ def create_task_factory(nopack_positions:set=set(), \
     # Every position is designable by defalut in the task factory other than specification.
     if excluded_amino_acid_types: # Exclude some AA types if specified.
         excluded_AAs = set(excluded_amino_acid_types)
-        restriction = RestrictAbsentCanonicalAASRLT(",".join(AA_1to3_dict.keys() - excluded_AAs))
+        restriction = RestrictAbsentCanonicalAASRLT(",".join(all_AAs - excluded_AAs))
         restriction.aas_to_keep()
         task_factory.push_back(OperateOnResidueSubset(restriction, design_selection))
 
@@ -968,20 +972,20 @@ def main(args):
             theozyme_pose_indices.update(residue_name3_selector(ddG_ref_pose, args.substrate_identities))
     # Get pose indices of enzdes positions.
     enzdes_pose_indices = set()
-    if args.enzyme_design_constraints:
-        if args.ddG_reference_pdb and args.ddG_reference_pdb is not True:
-            pdb_info = ddG_ref_pose.pdb_info()
-            pdb_file_name = args.ddG_reference_pdb
-        else:
-            pdb_info = pose.pdb_info()
-            pdb_file_name = args.pdb
-        enzdes_substrate_pose_indices, enzdes_res_pose_indices = \
-                get_enzdes_pose_indices(pdb_info, pdb_file_name, args.symmetry)
-        enzdes_pose_indices = enzdes_substrate_pose_indices.union(enzdes_res_pose_indices)
-        if args.enzdes_substrates_transformations:
-            rigid_body_tform_pose_indices.update(enzdes_substrate_pose_indices)
+    # if args.enzyme_design_constraints:
+    if args.ddG_reference_pdb and args.ddG_reference_pdb is not True:
+        pdb_info = ddG_ref_pose.pdb_info()
+        pdb_file_name = args.ddG_reference_pdb
+    else:
+        pdb_info = pose.pdb_info()
+        pdb_file_name = args.pdb
+    enzdes_substrate_pose_indices, enzdes_res_pose_indices = \
+            get_enzdes_pose_indices(pdb_info, pdb_file_name, args.symmetry)
+    enzdes_pose_indices = enzdes_substrate_pose_indices.union(enzdes_res_pose_indices)
+    if args.enzdes_substrates_transformations:
+        rigid_body_tform_pose_indices.update(enzdes_substrate_pose_indices)
     # Get all theozyme positions.
-    nonredundant_theozyme_pose_indices = set(filter(lambda pose_index: pose_index \
+    nonredundant_theozyme_pose_indices = set(filter(lambda pose_index: int(pose_index) \
             <= sequence_length, theozyme_pose_indices.union(enzdes_pose_indices)))
     # Rigid body transformations.
     rigid_body_tform_pose_indices = rigid_body_tform_pose_indices - static_pose_indices
@@ -1012,7 +1016,8 @@ def main(args):
             ddG_ref_pose=ddG_ref_pose, n_monomers=n_monomers, \
             truncate_sequence_end=truncate_sequence_end, \
             excluded_amino_acid_types=args.excluded_amino_acid_types, \
-            noncanonical_amino_acids=args.noncanonical_amino_acids)
+            noncanonical_amino_acids=args.noncanonical_amino_acids, \
+            allow_ncaa_in_design=args.allow_ncaa_in_design)
     for mutator in mutators:
         mutator.apply(pose)
     # Create the move map.
