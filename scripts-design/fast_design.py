@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 import argparse
-import math
 import numpy as np
 import os
 from pyrosetta import *
@@ -51,18 +50,20 @@ def parse_arguments():
     parser.add_argument("-symm", "--symmetry", type=str)
     parser.add_argument("-sf", "--score_function", type=str, default="ref2015_cst")
     parser.add_argument("--score_terms", type=str, nargs="*", default=list())
-    parser.add_argument("-coord_boundary", "--coordinate_constraint_bounded_width", type=float)
-    parser.add_argument("-no_coord_cst", "--no_coordinate_constraint_residues", \
+    parser.add_argument("-bounded_coord_cst", "--bounded_coordinate_constraint", type=float)
+    parser.add_argument("-all_coord_cst", "--all_atom_coordinate_constraints_positions", \
             type=str, nargs="*", default=list())
-    parser.add_argument("-no_opt_coord_cst", "--no_coordinate_constraint_on_optimization_region", \
+    parser.add_argument("-no_coord_cst", "--no_backbone_coordinate_constraints_residues", \
+            type=str, nargs="*", default=list())
+    parser.add_argument("-no_pack_coord_cst", "--no_coordinate_constraints_on_packing_region", \
             action="store_true")
-    parser.add_argument("-cst", "--constraints", type=str)
+    parser.add_argument("-cst", "--constraint_file", type=str)
     parser.add_argument("-dis_atoms", "--distance_constraint_atoms", type=str, nargs="*", \
             help="$chain$residue_index,$atom_name or $residue_name3,$atom_name * 2n")
     parser.add_argument("-dis_params", "--distance_constraint_parameters", type=str, nargs="*", \
             help="$distance,$standard_deviation or $dis,$sd,$dis,$sd,... * n")
-    parser.add_argument("-dis_bounds", "--distance_constraint_boundaries", type=str, nargs="*", \
-            help="$boundary or $boundary,$boundary,... or placeholder * n")
+    parser.add_argument("-bounded_dis", "--bounded_distances", type=str, nargs="*", \
+            help="$distance or $distance,$distance,... or placeholder * n")
     parser.add_argument("-angle_atoms", "--angle_constraint_atoms", type=str, nargs="*", \
             help="$chain$residue_index,$atom_name or $residue_name3,$atom_name * 3n")
     parser.add_argument("-angle_params", "--angle_constraint_parameters", type=str, nargs="*", \
@@ -120,8 +121,8 @@ def init_pyrosetta_with_opts(args):
         opts += " -extra_res_fa " + " ".join(args.parameters_files)
     if args.enzyme_design_constraints:
         opts += " -enzdes:cstfile {} -run:preserve_header".format(args.enzyme_design_constraints)
-    if args.constraints:
-        opts += " -constraints:cst_fa_file {}".format(args.constraints)
+    if args.constraint_file:
+        opts += " -constraints:cst_fa_file {}".format(args.constraint_file)
     init(opts)
 
 def set_score_function(score_function_weight_file, symmetry=False, score_terms=list()):
@@ -190,25 +191,6 @@ def customize_score_function(rep_type="hard", cartesian=False, symmetry=False, \
         term_weight = score_term.split(":")
         exec("score_function.set_weight(ScoreType.{}, {})".format(term_weight[0], term_weight[1]))
     return score_function
-
-def load_pdb_as_pose(pdb, coordinate_reference_pdb, ddG_reference_pdb):
-    pose = pose_from_pdb(pdb)
-    sequence_length = len(pose.sequence())
-    coord_ref_pose = None
-    if coordinate_reference_pdb:
-        coord_ref_pose = pose_from_pdb(coordinate_reference_pdb)
-    ddG_ref_pose = None
-    if ddG_reference_pdb:
-        if ddG_reference_pdb == "True":
-            ddG_ref_pose = Pose(pose)
-        else:
-            ddG_ref_pose = pose_from_pdb(ddG_reference_pdb)
-        ddG_reference_sequence_length = len(ddG_ref_pose.sequence())
-        truncate_sequence_end = ddG_reference_sequence_length - sequence_length
-        assert truncate_sequence_end >= 0
-    else:
-        truncate_sequence_end = 0
-    return pose, coord_ref_pose, ddG_ref_pose, sequence_length, truncate_sequence_end
 
 def pdb_to_pose_numbering(pose, chain_id_pdb_indices):
     '''
@@ -314,25 +296,24 @@ def set_chi_dihedral(pose, chi_dihedrals):
         for chi_residue_pose_index in chi_residue_pose_indices:
             pose.set_chi(int(chi_index), int(chi_residue_pose_index), float(dihedral_value))
 
-def create_coord_cst(coord_ref_pose=None, coord_boundary=None, no_coord_cst_selection=False, \
-        sidechain=False):
+def create_coordinate_constraints(coord_ref_pose=None, coord_cst_selection=None, \
+        standard_deviation:float=1, bounded_coord_cst:float=None, \
+        ca_only:bool=False, side_chain:bool=False):
     coord_cst_gen = CoordinateConstraintGenerator()
-    if coord_boundary:
-        coord_cst_gen.set_bounded(True)
-        coord_cst_gen.set_bounded_width(coord_boundary)
     if coord_ref_pose is not None:
         coord_cst_gen.set_reference_pose(coord_ref_pose)
-    if no_coord_cst_selection is not None:
-        if no_coord_cst_selection is not False:
-            coord_cst_gen.set_residue_selector(NotResidueSelector(no_coord_cst_selection))
-    else:
-        coord_cst_gen.set_residue_selector(OrResidueSelector())
-    if sidechain:
-        coord_cst_gen.set_sidechain(True)
+    if coord_cst_selection is not None:
+        coord_cst_gen.set_residue_selector(coord_cst_selection)
+    coord_cst_gen.set_sd(standard_deviation)
+    if bounded_coord_cst:
+        coord_cst_gen.set_bounded(True)
+        coord_cst_gen.set_bounded_width(bounded_coord_cst)
+    coord_cst_gen.set_ca_only(ca_only)
+    coord_cst_gen.set_sidechain(side_chain)
     return coord_cst_gen
 
 def create_harmonic_constraint(pose, atom_names, pose_indices, distance, standard_deviation, \
-        boundary=None):
+        bounded_distance:float=None):
     atom_list = list()
     for atom_name, residue_id in zip(atom_names, pose_indices):
         atom_list.append(AtomID(pose.residue(residue_id).atom_index(atom_name), residue_id))
@@ -340,29 +321,31 @@ def create_harmonic_constraint(pose, atom_names, pose_indices, distance, standar
         assert len(distance) == len(standard_deviation)
         harmonic_cst = AmbiguousConstraint()
         for i, dis_sd in enumerate(zip(distance, standard_deviation)):
-            if boundary:
-                harmonic_fc = FlatHarmonicFunc(dis_sd[0], dis_sd[1], boundary[i])
+            if bounded_distance:
+                harmonic_fc = FlatHarmonicFunc(dis_sd[0], dis_sd[1], bounded_distance[i])
             else:
                 harmonic_fc = HarmonicFunc(dis_sd[0], dis_sd[1])
             cst = AtomPairConstraint(atom_list[0], atom_list[1], harmonic_fc)
             harmonic_cst.add_individual_constraint(cst)
     else:
-        if boundary:
-            harmonic_fc = FlatHarmonicFunc(distance, standard_deviation, boundary)
+        if bounded_distance:
+            harmonic_fc = FlatHarmonicFunc(distance, standard_deviation, bounded_distance)
         else:
             harmonic_fc = HarmonicFunc(distance, standard_deviation)
         harmonic_cst = AtomPairConstraint(atom_list[0], atom_list[1], harmonic_fc)
     return harmonic_cst
 
-def create_circular_harmonic_constraint(pose, atom_names, pose_indices, degree, standard_deviation):
+def create_circular_harmonic_constraint(pose, atom_names, pose_indices, degrees, standard_deviation):
     atom_list = list()
     for atom_name, residue_id in zip(atom_names, pose_indices):
         atom_list.append(AtomID(pose.residue(residue_id).atom_index(atom_name), residue_id))
-    if type(degree) is list or type(degree) is np.ndarray:
-        assert len(degree) == len(standard_deviation)
+    radians = np.radians(degrees)
+    standard_deviation = np.radians(standard_deviation)
+    if type(radians) is np.ndarray:
+        assert len(radians) == len(standard_deviation)
         circular_harmonic_cst = AmbiguousConstraint()
-        for deg, sd in zip(degree, standard_deviation):
-            circular_harmonic_fc = CircularHarmonicFunc(math.pi / 180 * deg, sd)
+        for rad, sd in zip(radians, standard_deviation):
+            circular_harmonic_fc = CircularHarmonicFunc(rad, sd)
             if len(atom_list) == 3:
                 cst = AngleConstraint(atom_list[0], atom_list[1], atom_list[2], \
                         circular_harmonic_fc)
@@ -373,7 +356,7 @@ def create_circular_harmonic_constraint(pose, atom_names, pose_indices, degree, 
                 raise Exception("More than four atoms are specified in the circular harmonic constraint.")
             circular_harmonic_cst.add_individual_constraint(cst)
     else:
-        circular_harmonic_fc = CircularHarmonicFunc(math.pi / 180 * degree, standard_deviation)
+        circular_harmonic_fc = CircularHarmonicFunc(radians, standard_deviation)
         if len(atom_list) == 3:
             circular_harmonic_cst = AngleConstraint(atom_list[0], atom_list[1], \
                     atom_list[2], circular_harmonic_fc)
@@ -382,12 +365,12 @@ def create_circular_harmonic_constraint(pose, atom_names, pose_indices, degree, 
                     atom_list[2], atom_list[3], circular_harmonic_fc)
     return circular_harmonic_cst
 
-def create_constraints(pose, constraint_atoms, constraint_parameters, boundaries=None):
+def create_constraints(pose, constraint_atoms, constraint_parameters, bounded_distances=None):
     assert len(constraint_atoms) % len(constraint_parameters) == 0
     constraints = list()
     length = int(len(constraint_atoms) / len(constraint_parameters))
-    if boundaries:
-        assert len(boundaries) == len(constraint_parameters)
+    if bounded_distances:
+        assert len(bounded_distances) == len(constraint_parameters)
     # Enumerate multiple constraint specifications.
     for cst_index, cst_first_atom in enumerate(range(0, len(constraint_atoms), length)):
         # Get value(s) and standard deviation(s).
@@ -400,23 +383,23 @@ def create_constraints(pose, constraint_atoms, constraint_parameters, boundaries
             current_cst_parameters = np.array(list(float(param) for param in current_cst_parameters))\
                     .reshape(-1,2).transpose()
             value, standard_deviation = current_cst_parameters[0], current_cst_parameters[1]
-        # Get boundary(s).
-        if boundaries:
-            boundary = boundaries[cst_index]
-            if "," in boundary:
-                boundary = list()
-                for bound in boundary.split(","):
+        # Get bounded distances.
+        if bounded_distances:
+            bounded_distance = bounded_distances[cst_index]
+            if "," in bounded_distance:
+                bounded_distance = list()
+                for bounded_dis_i in bounded_distance.split(","):
                     try:
-                        bound = float(bound)
+                        bounded_dis_i = float(bounded_dis_i)
                     except:
-                        bound = None
-                boundary.append(bound)
+                        bounded_dis_i = None
+                bounded_distance.append(bounded_dis_i)
             try:
-                boundary = float(boundary)
+                bounded_distance = float(bounded_distance)
             except:
-                boundary = None
+                bounded_distance = None
         else:
-            boundary = None
+            bounded_distance = None
         # Get atoms.
         constraints_pose_indices = list()
         current_cst_atoms = constraint_atoms[cst_first_atom:cst_first_atom + length]
@@ -444,7 +427,7 @@ def create_constraints(pose, constraint_atoms, constraint_parameters, boundaries
             for pose_indices in constraints_pose_indices:
                 if len(atom_names) == 2:
                     constraint = create_harmonic_constraint(pose, atom_names, pose_indices, value, \
-                            standard_deviation, boundary=boundary)
+                            standard_deviation, bounded_distance=bounded_distance)
                 else:
                     constraint = create_circular_harmonic_constraint(pose, atom_names, pose_indices, \
                             value, standard_deviation)
@@ -502,7 +485,8 @@ def index_boolean_filter(index, boolean):
             return index
     return None
 
-def boolean_vector_to_indices_set(boolean_vector, n_monomers=1, truncate_sequence_end=0):
+def boolean_vector_to_indices_set(boolean_vector, n_monomers:int=1, \
+        truncate_sequence_end:int=0):
     boolean_vector = np.array(boolean_vector)
     sequence_length = len(boolean_vector) // n_monomers
     boolean_vector = boolean_vector[:n_monomers*sequence_length]\
@@ -513,14 +497,14 @@ def boolean_vector_to_indices_set(boolean_vector, n_monomers=1, truncate_sequenc
             range(1, len(boolean_vector) + 1), boolean_vector))
     return set(str(index) for index in indices_iterator)
 
-def set_symmetry(symmetry, sequence_length, *pose_list):
+def set_symmetry(symmetry:str, *pose_list, sequence_length:int=0):
     n_monomer = 1
     if symmetry:
-        sfsm = SetupForSymmetryMover(args.symmetry)
+        sfsm = SetupForSymmetryMover(symmetry)
         sfsm.set_keep_pdb_info_labels(True)
         for pose in filter(lambda p: p is not None, pose_list):
             sfsm.apply(pose)
-            if not n_monomer:
+            if not n_monomer and sequence_length > 0:
                 n_monomer = round(len(pose.sequence().strip("X")) / sequence_length)
     return n_monomer
 
@@ -602,7 +586,7 @@ def create_task_factory(nopack_positions:set=set(), \
     # Specify the point mutations.
     mutators = list()
     mutation_positions = set()
-    site_directed_ncAA_positions = set()
+    site_directed_ncaa_positions = set()
     canonical_AAs = set("ACDEFGHIKLMNPQRSTVWY")
     for point_mutation in point_mutations:
         mutating_position, target_AA = point_mutation.split(",")
@@ -618,7 +602,7 @@ def create_task_factory(nopack_positions:set=set(), \
             repack_shell_focus_positions.add(mutating_position)
             if not mutating_position in nopack_positions:
             # Repack the introduced noncanonical AA.
-                site_directed_ncAA_positions.add(mutating_position)
+                site_directed_ncaa_positions.add(mutating_position)
         else:
             restriction = RestrictAbsentCanonicalAASRLT()
             restriction.aas_to_keep(target_AA)
@@ -665,10 +649,9 @@ def create_task_factory(nopack_positions:set=set(), \
     # Design the theozyme-protein interface.
     design_shell_selection = select_neighborhood_region(design_shell_focus_selection, False)
     # Exclude the site-directed AA substitutions and nopack positions from the design shell.
-    site_directed_substitution_nopack_selection = ResidueIndexSelector(",".join(\
-            site_directed_substitution_positions.union(nopack_positions)) + ",")
     design_shell_selection = AndResidueSelector(design_shell_selection, \
-            NotResidueSelector(site_directed_substitution_nopack_selection))
+            NotResidueSelector(ResidueIndexSelector(",".join(\
+            site_directed_substitution_positions.union(nopack_positions)) + ",")))
     if ddG_ref_pose is not None:
         # Fix the design positions and truncate redundant ddG_ref_pose positions.
         binding_site_positions = boolean_vector_to_indices_set(\
@@ -689,40 +672,38 @@ def create_task_factory(nopack_positions:set=set(), \
     nopack_selection = ResidueIndexSelector(",".join(nopack_positions) + ",")
     # Need to exclude NCAA substitutions from the substitution selection when repacking.
     # In other words, explicitly include NCAA substitutions in repacking.
-    cAA_substitution_selection = AndResidueSelector(substitution_selection, NotResidueSelector(\
-            ResidueIndexSelector(",".join(site_directed_ncAA_positions) + ",")))
+    caa_substitution_selection = AndResidueSelector(substitution_selection, NotResidueSelector(\
+            ResidueIndexSelector(",".join(site_directed_ncaa_positions) + ",")))
     if repack_neighborhood_only:
         # Repack the neighborhood region of the AA substitutions and theozyme positions.
         # min_shell_focus_selection may contain nopack positions or redundant ddG_ref_pose positions.
         min_shell_focus_selection = select_neighborhood_region(OrResidueSelector(\
                 substitution_selection, repack_shell_focus_selection), True)
-        min_shell_focus_selection = OrResidueSelector(\
-                min_shell_focus_selection, additional_repacking_selection)
+        min_shell_focus_selection = OrResidueSelector(min_shell_focus_selection, \
+                additional_repacking_selection)
         if ddG_ref_pose is not None:
-            # Fix the repacking positions.
-            min_shell_focus_positions = boolean_vector_to_indices_set(\
-                    min_shell_focus_selection.apply(ddG_ref_pose), \
-                    n_monomers=n_monomers)
-            min_shell_focus_selection = ResidueIndexSelector(\
-                    ",".join(min_shell_focus_positions) + ",")
+            # Fix the repacking positions. # type(min_shell_focus_selection) == set
+            min_shell_focus_selection = boolean_vector_to_indices_set(\
+                    min_shell_focus_selection.apply(ddG_ref_pose), n_monomers=n_monomers)
             # Filter out redundant ddG_ref_pose positions.
-            pack_positions = boolean_vector_to_indices_set(\
-                    min_shell_focus_selection.apply(ddG_ref_pose), \
-                    truncate_sequence_end=truncate_sequence_end) - nopack_positions
+            pack_positions = boolean_vector_to_indices_set(ResidueIndexSelector(\
+                    ",".join(min_shell_focus_selection) + ",").apply(ddG_ref_pose), \
+                    n_monomers=n_monomers, truncate_sequence_end=truncate_sequence_end)\
+                    - nopack_positions
             pack_selection = ResidueIndexSelector(",".join(pack_positions) + ",")
         else:
             pack_selection = AndResidueSelector(min_shell_focus_selection, \
                     NotResidueSelector(nopack_selection))
         # Exclude the canonical AA substitutions and nopack positions from repacking.
         repacking_selection = AndResidueSelector(pack_selection, NotResidueSelector(\
-                cAA_substitution_selection))
+                caa_substitution_selection))
         task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), repacking_selection))
         # No repacking region.
         task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), pack_selection, True))
     else:
         # Exclude the canonical AA substitutions and nopack positions from repacking.
         task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), \
-                OrResidueSelector(cAA_substitution_selection, nopack_selection), True))
+                OrResidueSelector(caa_substitution_selection, nopack_selection), True))
         task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), nopack_selection))
         min_shell_focus_selection = None
 
@@ -741,6 +722,8 @@ def create_move_map(pose, focus_selection=None, minimize_neighborhood_only:bool=
     static_selection = ResidueIndexSelector(",".join(static_positions) + ",")
     if minimize_neighborhood_only:
         if focus_selection:
+            if type(focus_selection) == set:
+                focus_selection = ResidueIndexSelector(",".join(focus_selection) + ",")
             minimization_selection = select_neighborhood_region(focus_selection, True)
             if len(static_positions) > 0:
                 minimization_selection = AndResidueSelector(minimization_selection, \
@@ -791,6 +774,26 @@ def create_fast_relax_mover(score_function, task_factory, move_map=None):
         fast_relax.set_movemap(move_map)
     return fast_relax
 
+def load_pdb_as_pose(score_function, pdb:str, fold_tree, chi_dihedrals:list, \
+        constraint_file:str, geometry_constraints, constraints, symmetry:str):
+    # Load pdb as pose.
+    pose = load_pdb_as_pose(pdb)
+    if fold_tree:
+        pose.fold_tree(fold_tree)
+    set_chi_dihedral(pose, chi_dihedrals)
+    # Read constraint files from the command line.
+    if constraint_file:
+        add_fa_constraints_from_cmdline(pose, score_function)
+    # Add constraints on-the-fly.
+    for geometry_constraint in geometry_constraints:
+        pose.add_constraint(geometry_constraint)
+    # Add coordinate constraints, EnzDes constraints and AA type constraints.
+    for constraint in constraints:
+        constraint.apply(pose)
+    # Apply symmetry if specified.
+    set_symmetry(symmetry, pose)
+    return pose
+
 def calculate_energy(score_function, pose, calculate_energy_selection=None, score_type:str=None):
     # Create the metric
     metric = TotalEnergyMetric()
@@ -816,8 +819,11 @@ def read_energies_from_pdb(pdb_path, theozyme_positions:set=set()):
                 dG_substrate += float(line[:-1].split(" ")[-1])
     return total_score, dG_total, dG_substrate
 
-def run_jobs(pose, score_function, *movers, n_decoys=5, theozyme_positions:set=set(), \
-        output_filename=None):
+def run_jobs(score_function, pdb:str, fold_tree, chi_dihedrals:list, constraint_file:str, \
+        geometry_constraints, constraints, symmetry:str, movers, n_decoys:int=5, \
+        theozyme_positions:set=set(), output_filename:str=None):
+    pose = load_pdb_as_pose(score_function, pdb, fold_tree, chi_dihedrals, \
+        constraint_file, geometry_constraints, constraints, symmetry)
     if not output_filename:
         output_filename = pose.pdb_info().name().split("/")[-1][:-4]
     finished_decoys = 0
@@ -872,8 +878,11 @@ def run_jobs(pose, score_function, *movers, n_decoys=5, theozyme_positions:set=s
         with open(output_filename + ".dat", "a") as pf:
             pf.write(str(dG_substrate) + "\n")
 
-def run_job_distributor(pose, score_function, *movers, n_decoys=50, \
-        output_filename_prefix:str=None, annotated_name:str=None):
+def run_job_distributor(score_function, pdb:str, fold_tree, chi_dihedrals:list, \
+        constraint_file:str, geometry_constraints, constraints, symmetry:str, movers, \
+        n_decoys:int=5, output_filename_prefix:str=None, annotated_name:str=None):
+    pose = load_pdb_as_pose(score_function, pdb, fold_tree, chi_dihedrals, \
+        constraint_file, geometry_constraints, constraints, symmetry)
     if not output_filename_prefix:
         output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
     job_distributor = PyJobDistributor(output_filename_prefix, n_decoys, score_function)
@@ -896,56 +905,23 @@ def main(args):
     # Create the score function.
     score_function = set_score_function(args.score_function, symmetry=args.symmetry, \
             score_terms=args.score_terms)
-    # Load pdb as pose.
-    pose, coord_ref_pose, ddG_ref_pose, sequence_length, truncate_sequence_end = \
-            load_pdb_as_pose(args.pdb, args.coordinate_reference_pdb, args.ddG_reference_pdb)
-    # Group fragments in the fold tree.
-    if args.fold_tree:
-        pose.fold_tree(create_fold_tree(args.fold_tree))
-    elif args.alter_jump_edges:
-        pose.fold_tree(alter_fold_tree_jump_edges(pose.fold_tree(), args.alter_jump_edges))
-    # Set chi dihedrals.
-    set_chi_dihedral(pose, args.chi_dihedrals)
-    # Read constraint files from the command line.
-    if args.constraints:
-        add_fa_constraints_from_cmdline(pose, score_function)
-    # Add constraints on-the-fly.
-    constraints = list()
-    if args.distance_constraint_atoms:
-        constraints.extend(create_constraints(pose, args.distance_constraint_atoms, \
-                args.distance_constraint_parameters, boundaries=args.distance_constraint_boundaries))
-    if args.angle_constraint_atoms:
-        constraints.extend(create_constraints(pose, args.angle_constraint_atoms, \
-                args.angle_constraint_parameters))
-    if args.dihedral_constraint_atoms:
-        constraints.extend(create_constraints(pose, args.dihedral_constraint_atoms, \
-                args.dihedral_constraint_parameters))
-    for constraint in constraints:
-        pose.add_constraint(constraint)
-    # Add coordinate constraints.
-    if len(args.no_coordinate_constraint_residues) > 0:
-        no_coord_cst_residues, _ = pdb_to_pose_numbering(pose, args.no_coordinate_constraint_residues)
-        no_coord_cst_selection = ResidueIndexSelector(",".join(no_coord_cst_residues))
+    # Load pdb files as poses.
+    pose = pose_from_pdb(args.pdb)
+    sequence_length = len(pose.sequence())
+    coord_ref_pose = None
+    if args.coordinate_reference_pdb:
+        coord_ref_pose = pose_from_pdb(args.coordinate_reference_pdb)
+    ddG_ref_pose = None
+    if args.ddG_reference_pdb:
+        if args.ddG_reference_pdb == "True":
+            ddG_ref_pose = Pose(pose)
+        else:
+            ddG_ref_pose = pose_from_pdb(args.ddG_reference_pdb)
+        ddG_reference_sequence_length = len(ddG_ref_pose.sequence())
+        truncate_sequence_end = ddG_reference_sequence_length - sequence_length
+        assert truncate_sequence_end >= 0
     else:
-        no_coord_cst_selection = False
-    coord_cst_gen = create_coord_cst(coord_ref_pose = coord_ref_pose, \
-            coord_boundary = args.coordinate_constraint_bounded_width, \
-            no_coord_cst_selection = no_coord_cst_selection)
-    add_csts = AddConstraints()
-    add_csts.add_generator(coord_cst_gen)
-    add_csts.apply(pose)
-    # Add enzyme design constraints.
-    if args.enzyme_design_constraints:
-        enzdes_cst = create_enzdes_cst()
-        enzdes_cst.apply(pose)
-    # Favor native AA types.
-    if args.favor_native_residue and (args.design_residues or args.design_binding_site):
-        favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
-        favor_nataa.apply(pose)
-    # Create the RMSD metric.
-    no_rmsd_residues, _ = pdb_to_pose_numbering(pose, args.no_rmsd_residues)
-    rmsd_metric = RMSDMetric(pose, NotResidueSelector(ResidueIndexSelector(\
-                ",".join(no_rmsd_residues) + ",")))
+        truncate_sequence_end = 0
     # Convert pdb numberings to pose numberings.
     static_pose_indices, _ = pdb_to_pose_numbering(pose, args.static_residues)
     if args.static_residue_identities:
@@ -985,22 +961,40 @@ def main(args):
     if args.enzdes_substrates_transformations:
         rigid_body_tform_pose_indices.update(enzdes_substrate_pose_indices)
     # Get all theozyme positions.
-    nonredundant_theozyme_pose_indices = set(filter(lambda pose_index: int(pose_index) \
+    nonredundant_theozyme_pose_indices = set(filter(lambda index: int(index) \
             <= sequence_length, theozyme_pose_indices.union(enzdes_pose_indices)))
+    # Set fold tree.
+    if not args.fold_tree and not args.alter_jump_edges:
+        fold_tree = pose.fold_tree()
+    else:
+        if args.fold_tree:
+            fold_tree = create_fold_tree(args.fold_tree)
+        elif args.alter_jump_edges:
+            fold_tree = alter_fold_tree_jump_edges(pose.fold_tree(), args.alter_jump_edges)
+        pose.fold_tree(fold_tree)
     # Rigid body transformations.
     rigid_body_tform_pose_indices = rigid_body_tform_pose_indices - static_pose_indices
     rigid_body_tform_jump_edges = set()
     if len(rigid_body_tform_pose_indices) > 0:
-        rigid_body_tform_jump_edges = pose_indices_to_jump_edges(pose.fold_tree(), \
+        rigid_body_tform_jump_edges = pose_indices_to_jump_edges(fold_tree, \
                 rigid_body_tform_pose_indices)
-    # Applying the symmetry if specified.
-    n_monomers = set_symmetry(args.symmetry, sequence_length, pose, coord_ref_pose, ddG_ref_pose)
-    # Perform pre-minimization.
-    minimization_theozyme_pose_indices = nonredundant_theozyme_pose_indices - static_pose_indices
-    if args.pre_minimization and len(minimization_theozyme_pose_indices) > 0:
-        pre_minimizer = pre_minimization(pose, minimization_theozyme_pose_indices, \
-                jump_edges=rigid_body_tform_jump_edges)
-        pre_minimizer.apply(pose)
+    # Set chi dihedrals.
+    set_chi_dihedral(pose, args.chi_dihedrals)
+    # Apply symmetry if specified.
+    n_monomers = set_symmetry(args.symmetry, pose, coord_ref_pose, ddG_ref_pose, \
+            sequence_length=sequence_length)
+    # Add constraints on-the-fly.
+    geometry_constraints = list()
+    if args.distance_constraint_atoms:
+        geometry_constraints.extend(create_constraints(pose, args.distance_constraint_atoms, \
+                args.distance_constraint_parameters, \
+                bounded_distances=args.bounded_distances))
+    if args.angle_constraint_atoms:
+        geometry_constraints.extend(create_constraints(pose, args.angle_constraint_atoms, \
+                args.angle_constraint_parameters))
+    if args.dihedral_constraint_atoms:
+        geometry_constraints.extend(create_constraints(pose, args.dihedral_constraint_atoms, \
+                args.dihedral_constraint_parameters))
     # Create the task factory.
     task_factory, mutators, min_shell_focus_selection = create_task_factory(\
             nopack_positions=static_pose_indices, \
@@ -1018,8 +1012,56 @@ def main(args):
             excluded_amino_acid_types=args.excluded_amino_acid_types, \
             noncanonical_amino_acids=args.noncanonical_amino_acids, \
             allow_ncaa_in_design=args.allow_ncaa_in_design)
-    for mutator in mutators:
-        mutator.apply(pose)
+    # Coordinate and EnzDes constraints to be applied to the pose(s).
+    constraints = list()
+    # Add coordinate constraints.
+    add_csts = AddConstraints()
+    no_coord_cst_selection = OrResidueSelector()
+    no_coord_cst_residues, _ = pdb_to_pose_numbering(pose, \
+            args.no_backbone_coordinate_constraints_residues)
+    no_coord_cst_selection.add_residue_selector(ResidueIndexSelector(\
+            ",".join(no_coord_cst_residues) + ","))
+    if args.no_coordinate_constraints_on_packing_region:
+        if type(min_shell_focus_selection) == set:
+            pack_positions = set(filter(lambda index: int(index) <= sequence_length, \
+                    min_shell_focus_selection)) - static_pose_indices
+            no_coord_cst_selection.add_residue_selector(ResidueIndexSelector(\
+                    ",".join(pack_positions) + ","))
+        else:
+            no_coord_cst_selection.add_residue_selector(min_shell_focus_selection)
+    bb_coord_cst_gen = create_coordinate_constraints(coord_ref_pose=coord_ref_pose, \
+            coord_cst_selection=NotResidueSelector(no_coord_cst_selection), \
+            bounded_coord_cst=args.bounded_coordinate_constraint)
+    add_csts.add_generator(bb_coord_cst_gen)
+    all_atom_coord_cst_selection = ResidueIndexSelector(",".join(\
+            args.all_atom_coordinate_constraints_positions) + ",")
+    all_atom_coord_cst_gen = create_coordinate_constraints(coord_ref_pose=coord_ref_pose, \
+            coord_cst_selection=all_atom_coord_cst_selection, \
+            bounded_coord_cst=args.bounded_coordinate_constraint)
+    add_csts.add_generator(all_atom_coord_cst_gen)
+    constraints.append(add_csts)
+    # Add enzyme design constraints.
+    if args.enzyme_design_constraints:
+        enzdes_cst = create_enzdes_cst()
+        constraints.append(enzdes_cst)
+    # Favor native AA types.
+    if args.favor_native_residue and (args.design_residues or args.design_binding_site):
+        favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
+        constraints.append(favor_nataa)
+    # List of movers to be applied to the pose(s).
+    movers = list()
+    # Create the RMSD metric.
+    no_rmsd_residues, _ = pdb_to_pose_numbering(pose, args.no_rmsd_residues)
+    rmsd_metric = RMSDMetric(pose, NotResidueSelector(ResidueIndexSelector(\
+                ",".join(no_rmsd_residues) + ",")))
+    # Make some point mutations.
+    movers.extend(mutators)
+    # Perform pre-minimization.
+    minimization_theozyme_pose_indices = nonredundant_theozyme_pose_indices - static_pose_indices
+    if args.pre_minimization and len(minimization_theozyme_pose_indices) > 0:
+        pre_minimizer = pre_minimization(pose, minimization_theozyme_pose_indices, \
+                jump_edges=rigid_body_tform_jump_edges)
+        movers.append(pre_minimizer)
     # Create the move map.
     move_map = create_move_map(pose, focus_selection=min_shell_focus_selection, \
             minimize_neighborhood_only=args.minimize_neighborhood_only, \
@@ -1027,24 +1069,10 @@ def main(args):
             n_monomers=n_monomers, truncate_sequence_end=truncate_sequence_end, \
             jump_edges=rigid_body_tform_jump_edges)
     # Create the fast relax mover.
-    fr = create_fast_relax_mover(score_function, task_factory, move_map=move_map)
-    # Update coordinate constraints. Under development.
-    if args.no_coordinate_constraint_on_optimization_region:
-        if min_shell_focus_selection:
-            if no_coord_cst_selection:
-                no_coord_cst_selection = OrResidueSelector(\
-                        no_coord_cst_selection, min_shell_focus_selection)
-            else:
-                no_coord_cst_selection = min_shell_focus_selection
-        elif min_shell_focus_selection is None:
-            no_coord_cst_selection = None
-        # Unload old coordinate constraints and add new coordinate constraints.
-        coord_cst_gen = create_coord_cst(coord_ref_pose=coord_ref_pose, \
-                coord_boundary=args.coordinate_constraint_bounded_width, \
-                no_coord_cst_selection=no_coord_cst_selection)
-        add_csts = AddConstraints()
-        add_csts.add_generator(coord_cst_gen)
-        add_csts.apply(pose)
+    fast_relax = create_fast_relax_mover(score_function, task_factory, move_map=move_map)
+    movers.append(fast_relax)
+    # Add the RMSD metric.
+    movers.append(rmsd_metric)
     # Run jobs.
     if args.debug_mode:
         print(pose.fold_tree())
@@ -1055,11 +1083,13 @@ def main(args):
         print(move_map)
         print(score_function.show(pose))
     elif args.no_save_decoys:
-        run_jobs(pose, score_function, fr, rmsd_metric, n_decoys=5, \
+        run_jobs(score_function, args.pdb, fold_tree, args.chi_dihedrals, args.constraint_file, \
+                geometry_constraints, constraints, args.symmetry, movers, n_decoys=args.n_decoys, \
                 theozyme_positions=nonredundant_theozyme_pose_indices, \
                 output_filename=args.output_filename_prefix)
     else:
-        run_job_distributor(pose, score_function, fr, rmsd_metric, \
+        run_job_distributor(score_function, args.pdb, fold_tree, args.chi_dihedrals, \
+                args.constraint_file, geometry_constraints, constraints, args.symmetry, movers, \
                 n_decoys=args.n_decoys, output_filename_prefix=args.output_filename_prefix, \
                 annotated_name=args.annotated_name)
 
