@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import argparse
+import json
 import numpy as np
 import os
 from pyrosetta import *
@@ -9,7 +10,7 @@ from pyrosetta.rosetta.core.pack.task import TaskFactory
 from pyrosetta.rosetta.core.pack.task.operation import \
     IncludeCurrent, ExtraRotamers, OperateOnResidueSubset, \
     RestrictToRepackingRLT, RestrictAbsentCanonicalAASRLT, \
-    PreventRepackingRLT, PreventRepacking
+    PreventRepackingRLT
 from pyrosetta.rosetta.core.scoring import ScoreType
 from pyrosetta.rosetta.core.scoring.constraints import \
     add_fa_constraints_from_cmdline, ConstraintSet, AmbiguousConstraint, \
@@ -38,6 +39,7 @@ from pyrosetta.rosetta.protocols.symmetry import SetupForSymmetryMover
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("pdb", type=str)
+    parser.add_argument("-rotlib", "--rotamer_library", type=str, help="Rotamer library for ligands.")
     parser.add_argument("-ref", "--coordinate_reference_pdb", type=str)
     parser.add_argument("-ddG_ref", "--ddG_reference_pdb", type=str)
     parser.add_argument("-params", "--parameters_files", type=str, nargs="*")
@@ -87,6 +89,8 @@ def parse_arguments():
             help="Substrate-binding site AA design. Lower priority than -muts and -des.")
     parser.add_argument("-des_enzdes", "--design_enzdes_shell", action="store_true", \
             help="Enzdes shell AA design. Lower priority than -muts and -des.")
+    parser.add_argument("-ddG_WT", "--ddG_wildtype", action="store_true", \
+            help="Keep all -muts, -des, -des_bs and -des_enzdes positions as wildtype.")
     parser.add_argument("-nataa", "--favor_native_residue", type=float)
     parser.add_argument("-noaa", "--excluded_amino_acid_types", type=str, \
             help="Concatenated string of excluded AA one-letter codes.")
@@ -102,9 +106,9 @@ def parse_arguments():
             action="store_true")
     parser.add_argument("-no_rmsd", "--no_rmsd_residues", type=str, nargs="*", default=list())
     parser.add_argument("-n", "--n_decoys", type=int, default=50)
-    parser.add_argument("-o", "--output_filename_prefix", type=str)
-    parser.add_argument("--annotated_name", action="store_true")
-    parser.add_argument("-nosave", "--no_save_decoys", action="store_true")
+    parser.add_argument("-prefix", "--output_filename_prefix", type=str)
+    parser.add_argument("-suffix", "--output_filename_mutations_suffix", action="store_true")
+    parser.add_argument("-save_n", "--save_n_decoys", type=int)
     parser.add_argument("-debug", "--debug_mode", action="store_true")
     args = parser.parse_args()
     return args
@@ -538,14 +542,12 @@ def pre_minimization(pose, pre_min_positions, jump_edges:set=set()):
     pre_minimizer.movemap(move_map)
     return pre_minimizer
 
-def create_task_factory(nopack_positions:set=set(), \
-        point_mutations:set=set(), design_positions:set=set(), \
-        theozyme_positions:set=set(), enzdes_positions:set=set(), \
+def create_task_factory(nopack_positions:set=set(), point_mutations:set=set(), \
+        design_positions:set=set(), theozyme_positions:set=set(), enzdes_positions:set=set(), \
         design_binding_site:bool=False, design_enzdes_shell:bool=False, \
-        repack_neighborhood_only:bool=False, \
-        repack_binding_site:bool=True, repack_enzdes_shell:bool=True, \
-        ddG_ref_pose=None, n_monomers:int=1, truncate_sequence_end:int=0, \
-        excluded_amino_acid_types:str=None, \
+        repack_neighborhood_only:bool=False, repack_binding_site:bool=True, \
+        repack_enzdes_shell:bool=True, ddG_ref_pose=None, ddG_wildtype:bool=False, \
+        n_monomers:int=1, truncate_sequence_end:int=0, excluded_amino_acid_types:str=None, \
         noncanonical_amino_acids:list=list(), allow_ncaa_in_design:bool=False):
     """
     Priority:
@@ -594,16 +596,17 @@ def create_task_factory(nopack_positions:set=set(), \
             raise Exception("Specified AA type " + target_AA + " is not declared in -ncaa.")
         point_mutation_selection = ResidueIndexSelector(mutating_position)
         if mutating_position in nopack_positions or not target_AA in canonical_AAs:
-            mutator = MutateResidue()
-            mutator.set_selector(point_mutation_selection)
-            target_AA_name3 = AA_1to3_dict[target_AA]
-            mutator.set_res_name(target_AA_name3)
-            mutators.append(mutator)
+            if not ddG_wildtype:
+                mutator = MutateResidue()
+                mutator.set_selector(point_mutation_selection)
+                target_AA_name3 = AA_1to3_dict[target_AA]
+                mutator.set_res_name(target_AA_name3)
+                mutators.append(mutator)
             repack_shell_focus_positions.add(mutating_position)
             if not mutating_position in nopack_positions:
             # Repack the introduced noncanonical AA.
                 site_directed_ncaa_positions.add(mutating_position)
-        else:
+        elif not ddG_wildtype:
             restriction = RestrictAbsentCanonicalAASRLT()
             restriction.aas_to_keep(target_AA)
             task_factory.push_back(OperateOnResidueSubset(restriction, \
@@ -662,7 +665,8 @@ def create_task_factory(nopack_positions:set=set(), \
     substitution_selection = OrResidueSelector(substitution_selection, design_shell_selection)
 
     # Every position is designable by defalut in the task factory other than specification.
-    if excluded_amino_acid_types: # Exclude some AA types if specified.
+    if excluded_amino_acid_types and not ddG_wildtype:
+        # Exclude some AA types if specified.
         excluded_AAs = set(excluded_amino_acid_types)
         restriction = RestrictAbsentCanonicalAASRLT(",".join(all_AAs - excluded_AAs))
         restriction.aas_to_keep()
@@ -694,16 +698,23 @@ def create_task_factory(nopack_positions:set=set(), \
         else:
             pack_selection = AndResidueSelector(min_shell_focus_selection, \
                     NotResidueSelector(nopack_selection))
-        # Exclude the canonical AA substitutions and nopack positions from repacking.
-        repacking_selection = AndResidueSelector(pack_selection, NotResidueSelector(\
-                caa_substitution_selection))
+        if not ddG_wildtype:
+            # Exclude the canonical AA substitutions and nopack positions from repacking.
+            repacking_selection = AndResidueSelector(pack_selection, NotResidueSelector(\
+                    caa_substitution_selection))
+        else:
+            repacking_selection = pack_selection
         task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), repacking_selection))
         # No repacking region.
         task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), pack_selection, True))
     else:
-        # Exclude the canonical AA substitutions and nopack positions from repacking.
+        if not ddG_wildtype:
+            # Exclude the canonical AA substitutions and nopack positions from repacking.
+            not_repacking_selection = OrResidueSelector(caa_substitution_selection, nopack_selection)
+        else:
+            not_repacking_selection = nopack_selection
         task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), \
-                OrResidueSelector(caa_substitution_selection, nopack_selection), True))
+                not_repacking_selection, True))
         task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), nopack_selection))
         min_shell_focus_selection = None
 
@@ -777,7 +788,7 @@ def create_fast_relax_mover(score_function, task_factory, move_map=None):
 def load_pdb_as_pose(score_function, pdb:str, fold_tree, chi_dihedrals:list, \
         constraint_file:str, geometry_constraints, constraints, symmetry:str):
     # Load pdb as pose.
-    pose = load_pdb_as_pose(pdb)
+    pose = pose_from_pdb(pdb)
     if fold_tree:
         pose.fold_tree(fold_tree)
     set_chi_dihedral(pose, chi_dihedrals)
@@ -794,112 +805,248 @@ def load_pdb_as_pose(score_function, pdb:str, fold_tree, chi_dihedrals:list, \
     set_symmetry(symmetry, pose)
     return pose
 
-def calculate_energy(score_function, pose, calculate_energy_selection=None, score_type:str=None):
+def read_pdb_rotlib(pdb_file_name, rotlib_file):
+    rotlib = list()
+    with open(rotlib_file, "r") as p_rotlib:
+        for line in p_rotlib:
+            if line.startswith("REMARK"):
+                rotamer = list()
+            elif line.startswith("HETATM"):
+                rotamer.append(line)
+            elif line.startswith("TER"):
+                rotlib.append(rotamer)
+    substrate_identities_name3 = set()
+    for line in rotamer:
+        substrate_identities_name3.add(line[17:20])
+    pdb_lines = list()
+    with open(pdb_file_name, "r") as p_pdb:
+        for line in p_pdb:
+            if not line[17:20] in substrate_identities_name3 and not line.startswith("REMARK 666"):
+                pdb_lines.append(line)
+    return pdb_lines, rotlib
+
+def read_scores_from_pdb(pdb_path, theozyme_positions:set=set(), \
+        score_terms:set={"total_score", "coordinate_constraint"}):
+    scores = dict()
+    dG_substrate = None
+    with open(pdb_path, "r") as pf:
+        for line in pf:
+            if line.startswith("label "):
+                all_score_terms = line[:-1].split(" ")
+            elif line.startswith("pose "):
+                all_scores = line[:-1].split(" ")
+                for score_term in score_terms:
+                    key_word = score_term
+                    if score_term == "total_score":
+                        key_word = "total"
+                    scores[score_term] = float(all_scores[all_score_terms.index(key_word)])
+            elif line.split(" ")[0].split("_")[-1] in theozyme_positions:
+                if dG_substrate is None:
+                    dG_substrate = 0
+                dG_substrate += float(line[:-1].split(" ")[-1])
+    if dG_substrate is not None:
+        scores["substrates"] = dG_substrate
+    return scores
+
+def energy_metric(score_function, pose, selection=None, score_type:str=None):
     # Create the metric
     metric = TotalEnergyMetric()
     metric.set_scorefunction(score_function)
     if score_type:
         exec("metric.set_scoretype(ScoreType.{})".format(score_type))
     # Add the selector
-    if calculate_energy_selection:
-        metric.set_residue_selector(calculate_energy_selection)
+    if selection:
+        metric.set_residue_selector(selection)
     return metric.calculate(pose)
 
-def read_energies_from_pdb(pdb_path, theozyme_positions:set=set()):
-    dG_substrate = None
-    with open(pdb_path, "r") as pf:
-        for line in pf:
-            if line.startswith("label "):
-                score_terms = line[:-1].split(" ")
-            elif line.startswith("pose "):
-                scores = line[:-1].split(" ")
-                total_score = float(scores[score_terms.index("total")])
-                dG_total = total_score - float(scores[score_terms.index("coordinate_constraint")])
-            elif line.split(" ")[0].split("_")[-1] in theozyme_positions:
-                dG_substrate += float(line[:-1].split(" ")[-1])
-    return total_score, dG_total, dG_substrate
+def calculate_pose_scores(pose, score_function, theozyme_positions:set=set(), \
+        score_terms:set={"coordinate_constraint"}):
+    scores = dict()
+    for score_term in score_terms:
+        scores[score_term] = energy_metric(score_function, pose, score_type=score_term)
+    if len(theozyme_positions) > 0:
+        substrate_selection = ResidueIndexSelector(",".join(theozyme_positions))
+        scores["substrates"] = energy_metric(score_function, pose, selection=substrate_selection)
+    return scores
 
-def run_jobs(score_function, pdb:str, fold_tree, chi_dihedrals:list, constraint_file:str, \
-        geometry_constraints, constraints, symmetry:str, movers, n_decoys:int=5, \
-        theozyme_positions:set=set(), output_filename:str=None):
-    pose = load_pdb_as_pose(score_function, pdb, fold_tree, chi_dihedrals, \
-        constraint_file, geometry_constraints, constraints, symmetry)
-    if not output_filename:
-        output_filename = pose.pdb_info().name().split("/")[-1][:-4]
-    finished_decoys = 0
-    already_finished = False
-    if os.path.isfile(output_filename + ".pdb"):
-        already_finished = True
-        finished_decoys = n_decoys
-        _, dG_total, dG_substrate = read_energies_from_pdb(output_filename + ".pdb", \
-                theozyme_positions=theozyme_positions)
+def run_jobs(score_function, pdb, rotamer_library, fold_tree, chi_dihedrals:list, constraint_file:str, \
+        geometry_constraints, constraints, symmetry:str, movers, n_decoys:int=5, save_n_decoys:int=1, \
+        theozyme_positions:set=set(), output_filename_prefix:str=None, wildtype_sequence:str=str()):
+    if rotamer_library:
+        pdb_lines, rotlib = read_pdb_rotlib(pdb, rotamer_library)
+        n_decoys = min(n_decoys, len(rotlib))
     else:
-        for decoy in range(1, n_decoys + 1):
-            checkpoint = output_filename + "." + str(decoy) + ".in_progress.pdb"
-            if os.path.isfile(checkpoint):
-                finished_decoys = decoy
-                best_score, dG_total, dG_substrate = read_energies_from_pdb(checkpoint, \
-                        theozyme_positions=theozyme_positions)
-    substrate_selection = ResidueIndexSelector(",".join(theozyme_positions))
-    for decoy in range(finished_decoys + 1, n_decoys + 1):
-        pose_copy = Pose(pose)
+        pose = load_pdb_as_pose(score_function, pdb, fold_tree, chi_dihedrals, \
+                constraint_file, geometry_constraints, constraints, symmetry)
+    if not output_filename_prefix:
+        output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
+    n_finished_decoys = 0
+    decoy_scores_list = [None] * save_n_decoys
+    decoy_filenames_list = [None] * save_n_decoys
+    for filename in filter(lambda f: f.startswith(output_filename_prefix), os.listdir()):
+        scores = read_scores_from_pdb(filename, theozyme_positions=theozyme_positions)
+        filename_split = filename.split(".")
+        if filename.endswith(".checkpoint.pdb"):
+            i_decoy = int(filename.strip(".checkpoint.pdb").split("_")[-1])
+        elif len(filename_split) >= 3 and filename_split[-2].isdigit():
+            i_decoy = 0
+            ith_ranked_decoy = int(filename_split[-2])
+            decoy_scores_list[ith_ranked_decoy - 1] = scores
+            decoy_filenames_list[ith_ranked_decoy - 1] = filename
+        else:
+            i_decoy = n_decoys
+        if i_decoy > n_finished_decoys:
+            decoy_scores_list[0] = scores
+            decoy_filenames_list[0] = filename
+            n_finished_decoys = i_decoy
+    if n_finished_decoys > n_decoys:
+        n_finished_decoys = n_decoys
+    checkpoint_saved = True
+    if decoy_filenames_list[0] == None:
+        checkpoint_saved = False
+    decoy_scores_list = list(filter(lambda sc: sc, decoy_scores_list))
+    decoy_filenames_list = list(filter(lambda sc: sc, decoy_filenames_list))
+    if len(decoy_filenames_list) == 0:
+        checkpoint_saved = True
+    if not checkpoint_saved:
+        n_finished_decoys = len(decoy_filenames_list)
+        ranked_decoy_filename = decoy_filenames_list[0]
+        checkpoint_filename = ranked_decoy_filename[:-4][:ranked_decoy_filename[:-4].rfind(".")] + \
+                "_" + str(n_finished_decoys) + ".checkpoint.pdb"
+        with open(output_filename_prefix + ".log", "a") as p:
+            p.write(ranked_decoy_filename + " is renamed to " + checkpoint_filename + ".\n")
+        os.rename(ranked_decoy_filename, checkpoint_filename)
+        decoy_filenames_list[0] = checkpoint_filename
+    for i, ranked_decoy_filename in enumerate(decoy_filenames_list[1:]):
+        new_ranked_decoy_filename = ranked_decoy_filename[:-4][:ranked_decoy_filename[:-4].rfind(".")] + \
+                "." + str(i + 2) + ".pdb"
+        if i+2 > save_n_decoys:
+            os.remove(ranked_decoy_filename)
+        elif new_ranked_decoy_filename != ranked_decoy_filename:
+            with open(output_filename_prefix + ".log", "a") as p:
+                p.write(ranked_decoy_filename + " is renamed to " + new_ranked_decoy_filename + ".\n")
+            os.rename(ranked_decoy_filename, new_ranked_decoy_filename)
+            decoy_filenames_list[i + 1] = new_ranked_decoy_filename
+    if len(decoy_scores_list) > save_n_decoys:
+            decoy_scores_list = decoy_scores_list[:save_n_decoys]
+            decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
+    for i_decoy in range(n_finished_decoys + 1, n_decoys + 1):
+        if rotamer_library:
+            rotamer_index = np.random.randint(0, len(rotlib) - 1)
+            rotamer = rotlib[rotamer_index]
+            rotlib = rotlib[:rotamer_index] + rotlib[rotamer_index + 1:]
+            tmp_pdb = output_filename_prefix + "_" + str(i_decoy) + ".tmp.pdb"
+            with open(tmp_pdb, "w") as p_pdb:
+                p_pdb.writelines(pdb_lines)
+                p_pdb.writelines(rotamer)
+            pose_copy = load_pdb_as_pose(score_function, tmp_pdb, fold_tree, chi_dihedrals, \
+                    constraint_file, geometry_constraints, constraints, symmetry)
+            os.remove(tmp_pdb)
+        else:
+            pose_copy = Pose(pose)
         for mover in movers:
             mover.apply(pose_copy)
-        if decoy == 1:
-            pose_copy.dump_pdb(output_filename + ".1.in_progress.pdb")
-            best_score = calculate_energy(score_function, pose_copy)
-            best_pose = pose_copy
-            dG_total = None
-            dG_substrate = None
-        else:
-            current_score = calculate_energy(score_function, pose_copy)
-            if current_score < best_score:
-                pose_copy.dump_pdb(output_filename + "." + str(decoy) + ".in_progress.pdb")
-                os.remove(output_filename + "." + str(decoy - 1) + ".in_progress.pdb")
-                best_score = current_score
-                best_pose = pose_copy
-                dG_total = None
-                dG_substrate = None
+        mutated_sequence = pose_copy.sequence()
+        pdb_info = pose_copy.pdb_info()
+        insert_index = 0
+        current_score = energy_metric(score_function, pose_copy)
+        for index in range(len(decoy_scores_list)):
+            if current_score >= decoy_scores_list[index]["total_score"]:
+                insert_index = index + 1
             else:
-                os.rename(output_filename + "." + str(decoy - 1) + ".in_progress.pdb", \
-                        output_filename + "." + str(decoy) + ".in_progress.pdb")
-    if not already_finished:
-        os.rename(output_filename + "." + str(decoy) + ".in_progress.pdb", output_filename + ".pdb")
-    if dG_total == None:
-        dG_total = best_score - calculate_energy(score_function, best_pose, \
-                score_type="coordinate_constraint")
-    with open(output_filename + ".dat", "w") as pf:
-        pf.write(str(dG_total) + "\n")
-    if len(theozyme_positions) > 0:
-        if dG_substrate == None:
-            dG_substrate = calculate_energy(score_function, best_pose, selection=\
-                    substrate_selection) - calculate_energy(score_function, best_pose, \
-                    selection=substrate_selection, score_type="coordinate_constraint")
-        with open(output_filename + ".dat", "a") as pf:
-            pf.write(str(dG_substrate) + "\n")
+                break
+        current_output_filename = output_filename_prefix
+        for index, wt_aa in enumerate(wildtype_sequence):
+            aa = mutated_sequence[index]
+            if aa != wt_aa:
+                current_output_filename += "_" + wt_aa + pdb_info.pose2pdb(index + 1).split(" ")[0] + aa
+        if i_decoy < n_decoys:
+            checkpoint_file_suffix = "_" + str(i_decoy) + ".checkpoint.pdb"
+        else:
+            checkpoint_file_suffix = ".pdb"
+        if insert_index == 0:
+            if i_decoy > 1:
+                for i in range(len(decoy_filenames_list), 1, -1):
+                    ranked_decoy_filename = decoy_filenames_list[i-1]
+                    new_ranked_decoy_filename = ranked_decoy_filename[:-4]\
+                            [:ranked_decoy_filename[:-4].rfind(".")] + "." + str(i+1) + ".pdb"
+                    os.rename(ranked_decoy_filename, new_ranked_decoy_filename)
+                    decoy_filenames_list[i-1] = new_ranked_decoy_filename
+                old_checkpoint_filename = decoy_filenames_list[0]
+                ranked_decoy_filename = old_checkpoint_filename[:old_checkpoint_filename.rfind("_")]\
+                        + ".2.pdb"
+                os.rename(old_checkpoint_filename, ranked_decoy_filename)
+                decoy_filenames_list[0] = ranked_decoy_filename
+            current_output_filename += checkpoint_file_suffix
+        else:
+            old_checkpoint_filename = decoy_filenames_list[0]
+            checkpoint_filename = old_checkpoint_filename[:old_checkpoint_filename.rfind("_")] + \
+                    checkpoint_file_suffix
+            os.rename(decoy_filenames_list[0], checkpoint_filename)
+            if insert_index < save_n_decoys:
+                decoy_filenames_list[0] = checkpoint_filename
+                for i in range(len(decoy_filenames_list), insert_index, -1):
+                    ranked_decoy_filename = decoy_filenames_list[i-1]
+                    new_ranked_decoy_filename = ranked_decoy_filename[:-4]\
+                            [:ranked_decoy_filename[:-4].rfind(".")] + "." + str(i+1) + ".pdb"
+                    os.rename(ranked_decoy_filename, new_ranked_decoy_filename)
+                    decoy_filenames_list[i-1] = new_ranked_decoy_filename
+                current_output_filename += "." + str(insert_index + 1) + ".pdb"
+            else:
+                continue
+        scores = calculate_pose_scores(pose_copy, score_function, theozyme_positions=theozyme_positions)
+        scores["total_score"] = current_score
+        decoy_scores_list = decoy_scores_list[:insert_index] + [scores] + decoy_scores_list[insert_index:]
+        pose_copy.dump_pdb(current_output_filename)
+        decoy_filenames_list = decoy_filenames_list[:insert_index] + [current_output_filename] + \
+                decoy_filenames_list[insert_index:]
+        if len(decoy_scores_list) > save_n_decoys:
+            decoy_scores_list = decoy_scores_list[:save_n_decoys]
+            os.remove(decoy_filenames_list[save_n_decoys])
+            decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
+    with open(output_filename_prefix + ".dat", "w") as pf:
+        for scores in decoy_scores_list:
+            pf.write(json.dumps(scores) + "\n")
 
-def run_job_distributor(score_function, pdb:str, fold_tree, chi_dihedrals:list, \
+def run_job_distributor(score_function, pdb, rotamer_library, fold_tree, chi_dihedrals:list, \
         constraint_file:str, geometry_constraints, constraints, symmetry:str, movers, \
-        n_decoys:int=5, output_filename_prefix:str=None, annotated_name:str=None):
-    pose = load_pdb_as_pose(score_function, pdb, fold_tree, chi_dihedrals, \
-        constraint_file, geometry_constraints, constraints, symmetry)
+        n_decoys:int=5, output_filename_prefix:str=None, wildtype_sequence:str=str()):
+    if rotamer_library:
+        pdb_lines, rotlib = read_pdb_rotlib(pdb, rotamer_library)
+        n_decoys = min(n_decoys, len(rotlib))
+    else:
+        pose = load_pdb_as_pose(score_function, pdb, fold_tree, chi_dihedrals, \
+                constraint_file, geometry_constraints, constraints, symmetry)
     if not output_filename_prefix:
         output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
     job_distributor = PyJobDistributor(output_filename_prefix, n_decoys, score_function)
     while not job_distributor.job_complete:
-        pose_copy = Pose(pose)
+        if rotamer_library:
+            rotamer_index = np.random.randint(0, len(rotlib) - 1)
+            rotamer = rotlib[rotamer_index]
+            rotlib = rotlib[:rotamer_index] + rotlib[rotamer_index + 1:]
+            tmp_pdb = output_filename_prefix + "_" + str(i_decoy) + ".tmp.pdb"
+            with open(tmp_pdb, "w") as p_pdb:
+                p_pdb.writelines(pdb_lines)
+                p_pdb.writelines(rotamer)
+            pose_copy = load_pdb_as_pose(score_function, tmp_pdb, fold_tree, chi_dihedrals, \
+                    constraint_file, geometry_constraints, constraints, symmetry)
+            os.remove(tmp_pdb)
+        else:
+            pose_copy = Pose(pose)
         for mover in movers:
             mover.apply(pose_copy)
         job_distributor.output_decoy(pose_copy)
-        if annotated_name:
-            mutations_str = str()
-            for pose_index, wt_aa in pose.sequence():
-                aa = pose_copy.sequence()[pose_index]
-                if aa != wt_aa:
-                    mutations_str += "_" + wt_aa + str(pose_index) + aa
-            current_id = job_distributor.current_id
-            os.rename(job_distributor.pdb_name + "_" + str(current_id) + ".pdb", \
-                    job_distributor.pdb_name + mutations_str + "_" + str(current_id) + ".pdb")
+        mutated_sequence = pose_copy.sequence()
+        pdb_info = pose_copy.pdb_info()
+        suffix = str()
+        for index, wt_aa in enumerate(wildtype_sequence):
+            aa = mutated_sequence[index]
+            if aa != wt_aa:
+                suffix += "_" + wt_aa + pdb_info.pose2pdb(index + 1).split(" ")[0] + aa
+        current_id = job_distributor.current_id
+        os.rename(job_distributor.pdb_name + "_" + str(current_id) + ".pdb", \
+                job_distributor.pdb_name + suffix + "_" + str(current_id) + ".pdb")
 
 def main(args):
     # Create the score function.
@@ -907,7 +1054,10 @@ def main(args):
             score_terms=args.score_terms)
     # Load pdb files as poses.
     pose = pose_from_pdb(args.pdb)
-    sequence_length = len(pose.sequence())
+    wildtype_sequence = pose.sequence()
+    sequence_length = len(wildtype_sequence)
+    if not args.output_filename_mutations_suffix:
+        wildtype_sequence = str()
     coord_ref_pose = None
     if args.coordinate_reference_pdb:
         coord_ref_pose = pose_from_pdb(args.coordinate_reference_pdb)
@@ -1007,8 +1157,8 @@ def main(args):
             repack_neighborhood_only=args.repack_neighborhood_only, \
             repack_binding_site=not args.no_repack_binding_site, \
             repack_enzdes_shell=not args.no_repack_enzdes_shell, \
-            ddG_ref_pose=ddG_ref_pose, n_monomers=n_monomers, \
-            truncate_sequence_end=truncate_sequence_end, \
+            ddG_ref_pose=ddG_ref_pose, ddG_wildtype=args.ddG_wildtype, \
+            n_monomers=n_monomers, truncate_sequence_end=truncate_sequence_end, \
             excluded_amino_acid_types=args.excluded_amino_acid_types, \
             noncanonical_amino_acids=args.noncanonical_amino_acids, \
             allow_ncaa_in_design=args.allow_ncaa_in_design)
@@ -1053,8 +1203,8 @@ def main(args):
     # Create the RMSD metric.
     no_rmsd_residues, _ = pdb_to_pose_numbering(pose, args.no_rmsd_residues)
     rmsd_metric = RMSDMetric(pose, NotResidueSelector(ResidueIndexSelector(\
-                ",".join(no_rmsd_residues) + ",")))
-    # Make some point mutations.
+            ",".join(no_rmsd_residues) + ",")))
+    # Make some point mutations if not args.ddG_wildtype.
     movers.extend(mutators)
     # Perform pre-minimization.
     minimization_theozyme_pose_indices = nonredundant_theozyme_pose_indices - static_pose_indices
@@ -1082,16 +1232,17 @@ def main(args):
         print(task_factory.create_task_and_apply_taskoperations(pose))
         print(move_map)
         print(score_function.show(pose))
-    elif args.no_save_decoys:
-        run_jobs(score_function, args.pdb, fold_tree, args.chi_dihedrals, args.constraint_file, \
-                geometry_constraints, constraints, args.symmetry, movers, n_decoys=args.n_decoys, \
-                theozyme_positions=nonredundant_theozyme_pose_indices, \
-                output_filename=args.output_filename_prefix)
-    else:
-        run_job_distributor(score_function, args.pdb, fold_tree, args.chi_dihedrals, \
+    elif args.save_n_decoys:
+        run_jobs(score_function, args.pdb, args.rotamer_library, fold_tree, args.chi_dihedrals, \
                 args.constraint_file, geometry_constraints, constraints, args.symmetry, movers, \
-                n_decoys=args.n_decoys, output_filename_prefix=args.output_filename_prefix, \
-                annotated_name=args.annotated_name)
+                n_decoys=args.n_decoys, save_n_decoys=args.save_n_decoys, \
+                theozyme_positions=nonredundant_theozyme_pose_indices, \
+                output_filename_prefix=args.output_filename_prefix, wildtype_sequence=wildtype_sequence)
+    else:
+        run_job_distributor(score_function, args.pdb, args.rotamer_library, fold_tree, \
+                args.chi_dihedrals, args.constraint_file, geometry_constraints, constraints, \
+                args.symmetry, movers, n_decoys=args.n_decoys, \
+                output_filename_prefix=args.output_filename_prefix, wildtype_sequence=wildtype_sequence)
 
 
 if __name__ == "__main__":
