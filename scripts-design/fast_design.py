@@ -45,7 +45,7 @@ from pyrosetta.rosetta.utility import vector1_bool
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("pdb", type=str)
-    parser.add_argument("-rotlib", "--rotamer_library", type=str, help="Rotamer library for ligands.")
+    parser.add_argument("-cloud", "--cloud_pdb", action="store_true")
     parser.add_argument("-ref", "--coordinate_reference_pdb", type=str)
     parser.add_argument("-ddG_ref", "--ddG_reference_pdb", type=str)
     parser.add_argument("-params", "--parameters_files", type=str, nargs="*")
@@ -92,6 +92,8 @@ def parse_arguments():
     parser.add_argument("-subs", "--substrates", type=str, nargs="*")
     parser.add_argument("-sub_ids", "--substrate_identities", type=str, nargs="*", help="name3")
     parser.add_argument("-premin", "--pre_minimization", action="store_true")
+    parser.add_argument("-ddg_wt", "--ddG_wildtype", action="store_true", \
+            help="Keep all -muts, -des, -des_bs and -des_enzdes positions as wildtype.")
     parser.add_argument("-muts", "--mutations", type=str, nargs="*", default=list(), 
             help="Site-directed AA substitution. Highests priority.")
     parser.add_argument("-des", "--design_residues", type=str, nargs="*", default=list(), \
@@ -100,8 +102,6 @@ def parse_arguments():
             help="Substrate-binding site AA design. Lower priority than -muts and -des.")
     parser.add_argument("-des_enzdes", "--design_enzdes_shell", action="store_true", \
             help="Enzdes shell AA design. Lower priority than -muts and -des.")
-    parser.add_argument("-ddg_wt", "--ddG_wildtype", action="store_true", \
-            help="Keep all -muts, -des, -des_bs and -des_enzdes positions as wildtype.")
     parser.add_argument("-nataa", "--favor_native_residue", type=float)
     parser.add_argument("-noaa", "--excluded_amino_acid_types", type=str, \
             help="Concatenated string of excluded AA one-letter codes.")
@@ -113,7 +113,7 @@ def parse_arguments():
     parser.add_argument("-no_rpk_enzdes", "--no_repack_enzdes_shell", action="store_true")
     parser.add_argument("-min_nbh", "--minimize_neighborhood_only", action="store_true")
     parser.add_argument("-tform", "--substrate_rigid_body_transformations", action="store_true")
-    parser.add_argument("-tform_enzdes_subs", "--enzdes_substrates_transformations", \
+    parser.add_argument("-tform_enzdes", "--enzdes_substrates_transformations", \
             action="store_true")
     parser.add_argument("-no_rmsd", "--no_rmsd_residues", type=str, nargs="*", default=list())
     parser.add_argument("-n", "--n_decoys", type=int, default=50)
@@ -466,7 +466,7 @@ def get_enzdes_pose_indices(pdb_info, pdb, symmetry):
                     motif_pose_id = pdb_info.pdb2pose(motif_chain_id, motif_res_id)
                     enzdes_res_pose_indices.add(str(motif_pose_id))
                 flag = True
-            elif flag is True:
+            elif flag:
                 break
     return enzdes_substrate_pose_indices, enzdes_res_pose_indices
 
@@ -507,15 +507,17 @@ def boolean_vector_to_indices_set(boolean_vector, n_monomers:int=1, \
         return indices
 
 def set_symmetry(symmetry:str, *pose_list, sequence_length:int=0):
-    n_monomer = 1
     if symmetry:
         sfsm = SetupForSymmetryMover(symmetry)
         sfsm.set_keep_pdb_info_labels(True)
+        n_monomers = None
         for pose in filter(lambda p: p is not None, pose_list):
             sfsm.apply(pose)
-            if not n_monomer and sequence_length > 0:
-                n_monomer = round(len(pose.sequence().strip("X")) / sequence_length)
-    return n_monomer
+            if not n_monomers and sequence_length > 0:
+                n_monomers = round(len(pose.sequence().strip("X")) / sequence_length)
+    else:
+        n_monomers = 1
+    return n_monomers
 
 def select_neighborhood_region(focus_selection, include_focus: bool, method:str="vector"):
     if method == "vector":
@@ -793,12 +795,14 @@ def create_fast_relax_mover(score_function, task_factory, move_map=None):
     return fast_relax
 
 def load_pdb_as_pose(score_function, pdb:str, fold_tree, chi_dihedrals:list, \
-        constraint_file:str, geometry_constraints, constraints, symmetry:str):
+        symmetry:str, constraint_file:str, geometry_constraints, constraints):
     # Load pdb as pose.
     pose = pose_from_pdb(pdb)
     if fold_tree:
         pose.fold_tree(fold_tree)
     set_chi_dihedral(pose, chi_dihedrals)
+    # Apply symmetry if specified.
+    set_symmetry(symmetry, pose)
     # Read constraint files from the command line.
     if constraint_file:
         add_fa_constraints_from_cmdline(pose, score_function)
@@ -808,29 +812,39 @@ def load_pdb_as_pose(score_function, pdb:str, fold_tree, chi_dihedrals:list, \
     # Apply coordinate constraints, EnzDes constraints and AA type constraints.
     for constraint in constraints:
         constraint.apply(pose)
-    # Apply symmetry if specified.
-    set_symmetry(symmetry, pose)
     return pose
 
-def read_pdb_rotlib(pdb_file_name, rotlib_file):
-    rotlib = list()
-    with open(rotlib_file, "r") as p_rotlib:
-        for line in p_rotlib:
-            if line.startswith("REMARK"):
-                rotamer = list()
-            elif line.startswith("HETATM"):
-                rotamer.append(line)
-            elif line.startswith("TER"):
-                rotlib.append(rotamer)
-    substrate_identities_name3 = set()
-    for line in rotamer:
-        substrate_identities_name3.add(line[17:20])
+def parse_cloud_pdb(cloud_pdb):
+    cloud_pdb_lines = list()
     pdb_lines = list()
-    with open(pdb_file_name, "r") as p_pdb:
-        for line in p_pdb:
-            if not line[17:20] in substrate_identities_name3 and not line.startswith("REMARK 666"):
+    with open(cloud_pdb, "r") as pf:
+        substrate_name3 = None
+        read_rotamer = None
+        for line in pf:
+            if line.startswith("REMARK 666 MATCH TEMPLATE") and not substrate_name3:
+                chain_id = line[26]
+                substrate_name3 = line[28:31]
+                pdb_index = line[32:36]
                 pdb_lines.append(line)
-    return pdb_lines, rotlib
+                read_rotamer = False
+            elif line.startswith("ATOM  ") or line.startswith("HETATM"):
+                if read_rotamer:
+                    if line[17:20] == substrate_name3:
+                        rotamer_lines.append(line[:21] + chain_id + pdb_index + line[26:])
+                else:
+                    if line[17:20] == substrate_name3 and line[21] == chain_id and \
+                            line[22:26] == pdb_index:
+                        pass
+                    else:
+                        pdb_lines.append(line)
+            elif line.startswith("MODEL ") and read_rotamer == False:
+                read_rotamer = True
+                rotamer_lines = list()
+            elif line.startswith("ENDMDL"):
+                read_rotamer = False
+                cloud_pdb_lines.append(rotamer_lines)
+    cloud_pdb_lines.insert(0, pdb_lines)
+    return cloud_pdb_lines
 
 def read_scores_from_pdb(pdb_path, theozyme_positions:set=set(), \
         score_terms:set={"total_score", "coordinate_constraint"}):
@@ -876,15 +890,10 @@ def calculate_pose_scores(pose, score_function, theozyme_positions:set=set(), \
         scores["substrates"] = energy_metric(score_function, pose, selection=substrate_selection)
     return scores
 
-def run_jobs(score_function, pdb, rotamer_library, fold_tree, chi_dihedrals:list, constraint_file:str, \
-        geometry_constraints, constraints, symmetry:str, movers, n_decoys:int=5, save_n_decoys:int=1, \
-        theozyme_positions:set=set(), output_filename_prefix:str=None, wildtype_sequence:str=str()):
-    if rotamer_library:
-        pdb_lines, rotlib = read_pdb_rotlib(pdb, rotamer_library)
-        n_decoys = min(n_decoys, len(rotlib))
-    else:
-        pose = load_pdb_as_pose(score_function, pdb, fold_tree, chi_dihedrals, \
-                constraint_file, geometry_constraints, constraints, symmetry)
+def run_jobs(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file:str, \
+        geometry_constraints, constraints, symmetry:str, movers, cloud_pdb_lines:list=None, \
+        n_decoys:int=50, save_n_decoys:int=1, theozyme_positions:set=set(), \
+        output_filename_prefix:str=None, wildtype_sequence:str=str()):
     if not output_filename_prefix:
         output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
     n_finished_decoys = 0
@@ -938,16 +947,16 @@ def run_jobs(score_function, pdb, rotamer_library, fold_tree, chi_dihedrals:list
             decoy_scores_list = decoy_scores_list[:save_n_decoys]
             decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
     for i_decoy in range(n_finished_decoys + 1, n_decoys + 1):
-        if rotamer_library:
-            rotamer_index = np.random.randint(0, len(rotlib) - 1)
-            rotamer = rotlib[rotamer_index]
-            rotlib = rotlib[:rotamer_index] + rotlib[rotamer_index + 1:]
+        if cloud_pdb_lines:
+            rotamer_index = np.random.randint(1, len(cloud_pdb_lines) - 1)
+            rotamer_lines = cloud_pdb_lines[rotamer_index]
+            del cloud_pdb_lines[rotamer_index]
             tmp_pdb = output_filename_prefix + "_" + str(i_decoy) + ".tmp.pdb"
             with open(tmp_pdb, "w") as p_pdb:
-                p_pdb.writelines(pdb_lines)
-                p_pdb.writelines(rotamer)
+                p_pdb.writelines(cloud_pdb_lines[0])
+                p_pdb.writelines(rotamer_lines)
             pose_copy = load_pdb_as_pose(score_function, tmp_pdb, fold_tree, chi_dihedrals, \
-                    constraint_file, geometry_constraints, constraints, symmetry)
+                    symmetry, constraint_file, geometry_constraints, constraints)
             os.remove(tmp_pdb)
         else:
             pose_copy = Pose(pose)
@@ -989,7 +998,8 @@ def run_jobs(score_function, pdb, rotamer_library, fold_tree, chi_dihedrals:list
             old_checkpoint_filename = decoy_filenames_list[0]
             checkpoint_filename = old_checkpoint_filename[:old_checkpoint_filename.rfind("_")] + \
                     checkpoint_file_suffix
-            os.rename(decoy_filenames_list[0], checkpoint_filename)
+            os.rename(old_checkpoint_filename, checkpoint_filename)
+            decoy_filenames_list[0] = checkpoint_filename
             if insert_index < save_n_decoys:
                 decoy_filenames_list[0] = checkpoint_filename
                 for i in range(len(decoy_filenames_list), insert_index, -1):
@@ -1015,30 +1025,25 @@ def run_jobs(score_function, pdb, rotamer_library, fold_tree, chi_dihedrals:list
         for scores in decoy_scores_list:
             pf.write(json.dumps(scores) + "\n")
 
-def run_job_distributor(score_function, pdb, rotamer_library, fold_tree, chi_dihedrals:list, \
+def run_job_distributor(score_function, pose, fold_tree, chi_dihedrals:list, \
         constraint_file:str, geometry_constraints, constraints, symmetry:str, movers, \
-        n_decoys:int=5, output_filename_prefix:str=None, wildtype_sequence:str=str()):
-    if rotamer_library:
-        pdb_lines, rotlib = read_pdb_rotlib(pdb, rotamer_library)
-        n_decoys = min(n_decoys, len(rotlib))
-    else:
-        pose = load_pdb_as_pose(score_function, pdb, fold_tree, chi_dihedrals, \
-                constraint_file, geometry_constraints, constraints, symmetry)
+        cloud_pdb_lines:list=None, n_decoys:int=5, output_filename_prefix:str=None, \
+        wildtype_sequence:str=str()):
     if not output_filename_prefix:
         output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
     job_distributor = PyJobDistributor(output_filename_prefix, n_decoys, score_function)
     while not job_distributor.job_complete:
         i_decoy = job_distributor.current_id
-        if rotamer_library:
-            rotamer_index = np.random.randint(0, len(rotlib) - 1)
-            rotamer = rotlib[rotamer_index]
-            rotlib = rotlib[:rotamer_index] + rotlib[rotamer_index + 1:]
+        if cloud_pdb_lines:
+            rotamer_index = np.random.randint(1, len(cloud_pdb_lines) - 1)
+            rotamer_lines = cloud_pdb_lines[rotamer_index]
+            del cloud_pdb_lines[rotamer_index]
             tmp_pdb = output_filename_prefix + "_" + str(i_decoy) + ".tmp.pdb"
             with open(tmp_pdb, "w") as p_pdb:
-                p_pdb.writelines(pdb_lines)
-                p_pdb.writelines(rotamer)
+                p_pdb.writelines(cloud_pdb_lines[0])
+                p_pdb.writelines(rotamer_lines)
             pose_copy = load_pdb_as_pose(score_function, tmp_pdb, fold_tree, chi_dihedrals, \
-                    constraint_file, geometry_constraints, constraints, symmetry)
+                    symmetry, constraint_file, geometry_constraints, constraints)
             os.remove(tmp_pdb)
         else:
             pose_copy = Pose(pose)
@@ -1061,19 +1066,32 @@ def main(args):
             score_terms=args.score_terms)
     # Load pdb files as poses.
     pose = pose_from_pdb(args.pdb)
-    wildtype_sequence = pose.sequence()
-    sequence_length = len(wildtype_sequence)
-    if not args.output_filename_mutations_suffix:
-        wildtype_sequence = str()
     coord_ref_pose = None
     if args.coordinate_reference_pdb:
         coord_ref_pose = pose_from_pdb(args.coordinate_reference_pdb)
     ddG_ref_pose = None
     if args.ddG_reference_pdb:
         if args.ddG_reference_pdb == "True":
-            ddG_ref_pose = Pose(pose)
+            ddG_ref_pose = pose
         else:
             ddG_ref_pose = pose_from_pdb(args.ddG_reference_pdb)
+    # Parse cloud pdb.
+    if args.cloud_pdb:
+        cloud_pdb_lines = parse_cloud_pdb(args.pdb)
+        args.n_decoys = min(args.n_decoys, len(cloud_pdb_lines[1:]))
+        with open(args.pdb[:-4] + ".tmp.pdb", "w") as pf:
+            pf.writelines(cloud_pdb_lines[0])
+            pf.writelines(cloud_pdb_lines[1])
+        pose = pose_from_pdb(args.pdb[:-4] + ".tmp.pdb")
+        os.remove(args.pdb[:-4] + ".tmp.pdb")
+    else:
+        cloud_pdb_lines = None
+    # Get sequences information.
+    wildtype_sequence = pose.sequence()
+    sequence_length = len(wildtype_sequence)
+    if not args.output_filename_mutations_suffix:
+        wildtype_sequence = str()
+    if args.ddG_reference_pdb:
         ddG_reference_sequence_length = len(ddG_ref_pose.sequence())
         truncate_sequence_end = ddG_reference_sequence_length - sequence_length
         assert truncate_sequence_end >= 0
@@ -1112,14 +1130,8 @@ def main(args):
     # Get pose indices of enzdes positions.
     enzdes_pose_indices = set()
     # if args.enzyme_design_constraints:
-    if args.ddG_reference_pdb and args.ddG_reference_pdb is not True:
-        pdb_info = ddG_ref_pose.pdb_info()
-        pdb_file_name = args.ddG_reference_pdb
-    else:
-        pdb_info = pose.pdb_info()
-        pdb_file_name = args.pdb
-    enzdes_substrate_pose_indices, enzdes_res_pose_indices = \
-            get_enzdes_pose_indices(pdb_info, pdb_file_name, args.symmetry)
+    enzdes_substrate_pose_indices, enzdes_res_pose_indices = get_enzdes_pose_indices(\
+            pose.pdb_info(), args.pdb, args.symmetry)
     enzdes_pose_indices = enzdes_substrate_pose_indices.union(enzdes_res_pose_indices)
     if args.enzdes_substrates_transformations:
         rigid_body_tform_pose_indices.update(enzdes_substrate_pose_indices)
@@ -1146,6 +1158,9 @@ def main(args):
     # Apply symmetry if specified.
     n_monomers = set_symmetry(args.symmetry, pose, coord_ref_pose, ddG_ref_pose, \
             sequence_length=sequence_length)
+    # Read constraint files from the command line.
+    if args.constraint_file:
+        add_fa_constraints_from_cmdline(pose, score_function)
     # Add constraints on-the-fly.
     geometry_constraints = list()
     if args.distance_constraint_atoms:
@@ -1158,6 +1173,8 @@ def main(args):
     if args.dihedral_constraint_atoms:
         geometry_constraints.extend(create_constraints(pose, args.dihedral_constraint_atoms, \
                 args.dihedral_constraint_parameters))
+    for geometry_constraint in geometry_constraints:
+        pose.add_constraint(geometry_constraint)
     # Create the task factory.
     task_factory, mutators, min_shell_focus_selection = create_task_factory(\
             nopack_positions=static_pose_indices, \
@@ -1208,14 +1225,17 @@ def main(args):
             bounded=args.bounded_coordinate_constraints, \
             ca_only=args.only_CA_coordinate_constraints, side_chain=True)
     add_csts.add_generator(all_atom_coord_cst_gen)
+    add_csts.apply(pose)
     constraints.append(add_csts)
     # Add enzyme design constraints.
     if args.enzyme_design_constraints:
         enzdes_cst = create_enzdes_cst()
+        enzdes_cst.apply(pose)
         constraints.append(enzdes_cst)
     # Favor native AA types.
     if args.favor_native_residue and (args.design_residues or args.design_binding_site):
         favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
+        favor_nataa.apply(pose)
         constraints.append(favor_nataa)
     # List of movers.
     movers = list()
@@ -1247,8 +1267,6 @@ def main(args):
     movers.append(rmsd_metric)
     # Run jobs.
     if args.debug_mode:
-        pose = load_pdb_as_pose(score_function, args.pdb, fold_tree, args.chi_dihedrals, \
-                args.constraint_file, geometry_constraints, constraints, args.symmetry)
         print(pose.fold_tree())
         if args.enzyme_design_constraints:
             print(enzdes_substrate_pose_indices)
@@ -1259,16 +1277,19 @@ def main(args):
         print(move_map)
         print(score_function.show(pose))
     elif args.save_n_decoys:
-        run_jobs(score_function, args.pdb, args.rotamer_library, fold_tree, args.chi_dihedrals, \
-                args.constraint_file, geometry_constraints, constraints, args.symmetry, movers, \
+        run_jobs(score_function, pose, fold_tree, args.chi_dihedrals, \
+                args.constraint_file, geometry_constraints, constraints, \
+                args.symmetry, movers, cloud_pdb_lines=cloud_pdb_lines, \
                 n_decoys=args.n_decoys, save_n_decoys=args.save_n_decoys, \
                 theozyme_positions=nonredundant_theozyme_pose_indices, \
-                output_filename_prefix=args.output_filename_prefix, wildtype_sequence=wildtype_sequence)
+                output_filename_prefix=args.output_filename_prefix, \
+                wildtype_sequence=wildtype_sequence)
     else:
-        run_job_distributor(score_function, args.pdb, args.rotamer_library, fold_tree, \
-                args.chi_dihedrals, args.constraint_file, geometry_constraints, constraints, \
-                args.symmetry, movers, n_decoys=args.n_decoys, \
-                output_filename_prefix=args.output_filename_prefix, wildtype_sequence=wildtype_sequence)
+        run_job_distributor(score_function, pose, fold_tree, args.chi_dihedrals, \
+                args.constraint_file, geometry_constraints, constraints, \
+                args.symmetry, movers, cloud_pdb_lines=cloud_pdb_lines, \
+                n_decoys=args.n_decoys, output_filename_prefix=args.output_filename_prefix, \
+                wildtype_sequence=wildtype_sequence)
 
 
 if __name__ == "__main__":
