@@ -320,9 +320,9 @@ def create_harmonic_constraint(pose, atom_names, pose_indices, distance, standar
     if type(distance) is list or type(distance) is np.ndarray:
         assert len(distance) == len(standard_deviation)
         harmonic_cst = AmbiguousConstraint()
-        for i, dis_sd in enumerate(zip(distance, standard_deviation)):
+        for i_nested, dis_sd in enumerate(zip(distance, standard_deviation)):
             if bounded_distance:
-                harmonic_fc = FlatHarmonicFunc(dis_sd[0], dis_sd[1], bounded_distance[i])
+                harmonic_fc = FlatHarmonicFunc(dis_sd[0], dis_sd[1], bounded_distance[i_nested])
             else:
                 harmonic_fc = HarmonicFunc(dis_sd[0], dis_sd[1])
             cst = AtomPairConstraint(atom_list[0], atom_list[1], harmonic_fc)
@@ -821,10 +821,11 @@ def parse_cloud_pdb(cloud_pdb):
         substrate_name3 = None
         read_rotamer = None
         for line in pf:
-            if line.startswith("REMARK 666 MATCH TEMPLATE") and not substrate_name3:
-                chain_id = line[26]
-                substrate_name3 = line[28:31]
-                pdb_index = line[32:36]
+            if line.startswith("REMARK 666 MATCH TEMPLATE"):
+                if not substrate_name3:
+                    chain_id = line[26]
+                    substrate_name3 = line[28:31]
+                    pdb_index = line[32:36]
                 pdb_lines.append(line)
                 read_rotamer = False
             elif line.startswith("ATOM  ") or line.startswith("HETATM"):
@@ -890,7 +891,7 @@ def calculate_pose_scores(pose, score_function, theozyme_positions:set=set(), \
         scores["substrates"] = energy_metric(score_function, pose, selection=substrate_selection)
     return scores
 
-def run_jobs(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file:str, \
+def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file:str, \
         geometry_constraints, constraints, symmetry:str, movers, cloud_pdb_lines:list=None, \
         n_decoys:int=50, save_n_decoys:int=1, theozyme_positions:set=set(), \
         output_filename_prefix:str=None, wildtype_sequence:str=str()):
@@ -899,19 +900,31 @@ def run_jobs(score_function, pose, fold_tree, chi_dihedrals:list, constraint_fil
     n_finished_decoys = 0
     decoy_scores_list = [None] * save_n_decoys
     decoy_filenames_list = [None] * save_n_decoys
-    for filename in filter(lambda f: f.startswith(output_filename_prefix), os.listdir()):
+    for filename in filter(lambda f: f.startswith(output_filename_prefix) and \
+            f.endswith(".pdb"), os.listdir()):
         scores = read_scores_from_pdb(filename, theozyme_positions=theozyme_positions)
         filename_split = filename.split(".")
-        if filename.endswith(".checkpoint.pdb"):
-            i_decoy = int(filename.strip(".checkpoint.pdb").split("_")[-1])
+        i_decoy = None
+        if filename.endswith("_checkpoint.pdb"):
+            i_decoy = int(filename.strip("_checkpoint.pdb").split(".")[-1])
         elif len(filename_split) >= 3 and filename_split[-2].isdigit():
             i_decoy = 0
             ith_ranked_decoy = int(filename_split[-2])
-            decoy_scores_list[ith_ranked_decoy - 1] = scores
-            decoy_filenames_list[ith_ranked_decoy - 1] = filename
+            now_saved_n_decoys = len(decoy_scores_list)
+            if ith_ranked_decoy <= now_saved_n_decoys:
+                decoy_scores_list[ith_ranked_decoy - 1] = scores
+                decoy_filenames_list[ith_ranked_decoy - 1] = filename
+            else:
+                decoy_scores_list = decoy_scores_list + [None] * (ith_ranked_decoy - now_saved_n_decoys \
+                        - 1) + [scores]
+                decoy_filenames_list = decoy_filenames_list + [None] * (ith_ranked_decoy - \
+                        now_saved_n_decoys - 1) + [filename]
         else:
-            i_decoy = n_decoys
-        if i_decoy > n_finished_decoys:
+            if filename.endswith("_tmp.pdb"):
+                os.remove(filename)
+            else:
+                i_decoy = n_decoys
+        if i_decoy and i_decoy > n_finished_decoys:
             decoy_scores_list[0] = scores
             decoy_filenames_list[0] = filename
             n_finished_decoys = i_decoy
@@ -921,37 +934,33 @@ def run_jobs(score_function, pose, fold_tree, chi_dihedrals:list, constraint_fil
     if decoy_filenames_list[0] == None:
         checkpoint_saved = False
     decoy_scores_list = list(filter(lambda sc: sc, decoy_scores_list))
-    decoy_filenames_list = list(filter(lambda sc: sc, decoy_filenames_list))
+    decoy_filenames_list = list(filter(lambda fn: fn, decoy_filenames_list))
     if len(decoy_filenames_list) == 0:
         checkpoint_saved = True
     if not checkpoint_saved:
         n_finished_decoys = len(decoy_filenames_list)
         ranked_decoy_filename = decoy_filenames_list[0]
-        checkpoint_filename = ranked_decoy_filename[:-4][:ranked_decoy_filename[:-4].rfind(".")] + \
-                "_" + str(n_finished_decoys) + ".checkpoint.pdb"
-        with open(output_filename_prefix + ".log", "a") as p:
-            p.write(ranked_decoy_filename + " is renamed to " + checkpoint_filename + ".\n")
+        checkpoint_filename = ranked_decoy_filename[:ranked_decoy_filename[:-4].rfind(".")] + \
+                "." + str(n_finished_decoys) + "_checkpoint.pdb"
         os.rename(ranked_decoy_filename, checkpoint_filename)
         decoy_filenames_list[0] = checkpoint_filename
-    for i, ranked_decoy_filename in enumerate(decoy_filenames_list[1:]):
-        new_ranked_decoy_filename = ranked_decoy_filename[:-4][:ranked_decoy_filename[:-4].rfind(".")] + \
-                "." + str(i + 2) + ".pdb"
-        if i+2 > save_n_decoys:
+    for load_index, ranked_decoy_filename in enumerate(decoy_filenames_list[1:]):
+        new_ranked_decoy_filename = ranked_decoy_filename[:ranked_decoy_filename[:-4].rfind(".")] + \
+                "." + str(load_index + 2) + ".pdb"
+        if load_index + 2 > save_n_decoys:
             os.remove(ranked_decoy_filename)
         elif new_ranked_decoy_filename != ranked_decoy_filename:
-            with open(output_filename_prefix + ".log", "a") as p:
-                p.write(ranked_decoy_filename + " is renamed to " + new_ranked_decoy_filename + ".\n")
             os.rename(ranked_decoy_filename, new_ranked_decoy_filename)
-            decoy_filenames_list[i + 1] = new_ranked_decoy_filename
-    if len(decoy_scores_list) > save_n_decoys:
-            decoy_scores_list = decoy_scores_list[:save_n_decoys]
-            decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
+            decoy_filenames_list[load_index + 1] = new_ranked_decoy_filename
+    if len(decoy_filenames_list) > save_n_decoys:
+        decoy_scores_list = decoy_scores_list[:save_n_decoys]
+        decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
     for i_decoy in range(n_finished_decoys + 1, n_decoys + 1):
         if cloud_pdb_lines:
             rotamer_index = np.random.randint(1, len(cloud_pdb_lines) - 1)
             rotamer_lines = cloud_pdb_lines[rotamer_index]
             del cloud_pdb_lines[rotamer_index]
-            tmp_pdb = output_filename_prefix + "_" + str(i_decoy) + ".tmp.pdb"
+            tmp_pdb = output_filename_prefix + "." + str(i_decoy) + "_tmp.pdb"
             with open(tmp_pdb, "w") as p_pdb:
                 p_pdb.writelines(cloud_pdb_lines[0])
                 p_pdb.writelines(rotamer_lines)
@@ -977,37 +986,37 @@ def run_jobs(score_function, pose, fold_tree, chi_dihedrals:list, constraint_fil
             if aa != wt_aa:
                 current_output_filename += "_" + wt_aa + pdb_info.pose2pdb(index + 1).split(" ")[0] + aa
         if i_decoy < n_decoys:
-            checkpoint_file_suffix = "_" + str(i_decoy) + ".checkpoint.pdb"
+            checkpoint_file_suffix = "." + str(i_decoy) + "_checkpoint.pdb"
         else:
             checkpoint_file_suffix = ".pdb"
         if insert_index == 0:
             if i_decoy > 1:
-                for i in range(len(decoy_filenames_list), 1, -1):
-                    ranked_decoy_filename = decoy_filenames_list[i-1]
-                    new_ranked_decoy_filename = ranked_decoy_filename[:-4]\
-                            [:ranked_decoy_filename[:-4].rfind(".")] + "." + str(i+1) + ".pdb"
+                for move_index in range(len(decoy_filenames_list), 1, -1):
+                    ranked_decoy_filename = decoy_filenames_list[move_index - 1]
+                    new_ranked_decoy_filename = ranked_decoy_filename\
+                            [:ranked_decoy_filename[:-4].rfind(".")] + "." + str(move_index + 1) + ".pdb"
                     os.rename(ranked_decoy_filename, new_ranked_decoy_filename)
-                    decoy_filenames_list[i-1] = new_ranked_decoy_filename
+                    decoy_filenames_list[move_index - 1] = new_ranked_decoy_filename
                 old_checkpoint_filename = decoy_filenames_list[0]
-                ranked_decoy_filename = old_checkpoint_filename[:old_checkpoint_filename.rfind("_")]\
+                ranked_decoy_filename = old_checkpoint_filename[:old_checkpoint_filename[:-4].rfind(".")]\
                         + ".2.pdb"
                 os.rename(old_checkpoint_filename, ranked_decoy_filename)
                 decoy_filenames_list[0] = ranked_decoy_filename
             current_output_filename += checkpoint_file_suffix
         else:
             old_checkpoint_filename = decoy_filenames_list[0]
-            checkpoint_filename = old_checkpoint_filename[:old_checkpoint_filename.rfind("_")] + \
+            checkpoint_filename = old_checkpoint_filename[:old_checkpoint_filename[:-4].rfind(".")] + \
                     checkpoint_file_suffix
             os.rename(old_checkpoint_filename, checkpoint_filename)
             decoy_filenames_list[0] = checkpoint_filename
             if insert_index < save_n_decoys:
                 decoy_filenames_list[0] = checkpoint_filename
-                for i in range(len(decoy_filenames_list), insert_index, -1):
-                    ranked_decoy_filename = decoy_filenames_list[i-1]
-                    new_ranked_decoy_filename = ranked_decoy_filename[:-4]\
-                            [:ranked_decoy_filename[:-4].rfind(".")] + "." + str(i+1) + ".pdb"
+                for move_index in range(len(decoy_filenames_list), insert_index, -1):
+                    ranked_decoy_filename = decoy_filenames_list[move_index - 1]
+                    new_ranked_decoy_filename = ranked_decoy_filename\
+                            [:ranked_decoy_filename[:-4].rfind(".")] + "." + str(move_index + 1) + ".pdb"
                     os.rename(ranked_decoy_filename, new_ranked_decoy_filename)
-                    decoy_filenames_list[i-1] = new_ranked_decoy_filename
+                    decoy_filenames_list[move_index - 1] = new_ranked_decoy_filename
                 current_output_filename += "." + str(insert_index + 1) + ".pdb"
             else:
                 continue
@@ -1017,11 +1026,11 @@ def run_jobs(score_function, pose, fold_tree, chi_dihedrals:list, constraint_fil
         pose_copy.dump_pdb(current_output_filename)
         decoy_filenames_list = decoy_filenames_list[:insert_index] + [current_output_filename] + \
                 decoy_filenames_list[insert_index:]
-        if len(decoy_scores_list) > save_n_decoys:
+        if len(decoy_filenames_list) > save_n_decoys:
             decoy_scores_list = decoy_scores_list[:save_n_decoys]
             os.remove(decoy_filenames_list[save_n_decoys])
             decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
-    with open(output_filename_prefix + ".dat", "w") as pf:
+    with open(output_filename_prefix + ".sc", "w") as pf:
         for scores in decoy_scores_list:
             pf.write(json.dumps(scores) + "\n")
 
@@ -1277,7 +1286,7 @@ def main(args):
         print(move_map)
         print(score_function.show(pose))
     elif args.save_n_decoys:
-        run_jobs(score_function, pose, fold_tree, args.chi_dihedrals, \
+        run_job(score_function, pose, fold_tree, args.chi_dihedrals, \
                 args.constraint_file, geometry_constraints, constraints, \
                 args.symmetry, movers, cloud_pdb_lines=cloud_pdb_lines, \
                 n_decoys=args.n_decoys, save_n_decoys=args.save_n_decoys, \
