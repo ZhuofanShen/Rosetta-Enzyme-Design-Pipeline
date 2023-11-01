@@ -1033,9 +1033,9 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
             decoy_scores_list = decoy_scores_list[:save_n_decoys]
             os.remove(decoy_filenames_list[save_n_decoys])
             decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
-    with open(output_filename_prefix + ".sc", "w") as pf:
-        for scores in decoy_scores_list:
-            pf.write(json.dumps(scores) + "\n")
+        with open(output_filename_prefix + ".sc", "w") as pf:
+            for scores in decoy_scores_list:
+                pf.write(json.dumps(scores) + "\n")
 
 def run_job_distributor(score_function, pose, fold_tree, chi_dihedrals:list, \
         constraint_file:str, geometry_constraints, constraints, symmetry:str, movers, \
