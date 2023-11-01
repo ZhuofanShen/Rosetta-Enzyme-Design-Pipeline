@@ -941,11 +941,6 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
         decoy_scores_list[0] = scores
         decoy_filenames_list[0] = filename
         first_checkpoint = False
-    if n_finished_decoys == n_decoys:
-        with open(output_filename_prefix + ".sc", "w") as pf:
-            for filename, scores in zip(decoy_filenames_list, decoy_scores_list):
-                scores["decoy"] = filename
-                pf.write(json.dumps(scores) + "\n")
     checkpoint_saved = True
     if decoy_filenames_list[0] == None:
         checkpoint_saved = False
@@ -953,6 +948,11 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
     decoy_filenames_list = list(filter(lambda fn: fn, decoy_filenames_list))
     if len(decoy_filenames_list) == 0:
         checkpoint_saved = True
+    else:
+        with open(output_filename_prefix + ".sc", "w") as pf:
+            for filename, scores in zip(decoy_filenames_list, decoy_scores_list):
+                scores["decoy"] = filename
+                pf.write(json.dumps(scores) + "\n")
     if not checkpoint_saved:
         n_finished_decoys = len(decoy_filenames_list)
         ranked_decoy_filename = decoy_filenames_list[0]
