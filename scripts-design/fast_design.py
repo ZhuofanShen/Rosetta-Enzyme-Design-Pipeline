@@ -849,7 +849,8 @@ def parse_cloud_pdb(cloud_pdb):
     return cloud_pdb_lines
 
 def read_scores_from_pdb(pdb_path, theozyme_positions:set=set(), \
-        score_terms:set={"total_score", "coordinate_constraint"}):
+        score_terms:set={"total_score", "coordinate_constraint", "atom_pair_constraint", \
+        "angle_constraint", "dihedral_constraint"}):
     scores = dict()
     dG_substrate = None
     with open(pdb_path, "r") as pf:
@@ -883,7 +884,8 @@ def energy_metric(score_function, pose, selection=None, score_type:str=None):
     return metric.calculate(pose)
 
 def calculate_pose_scores(pose, score_function, theozyme_positions:set=set(), \
-        score_terms:set={"coordinate_constraint"}):
+        score_terms:set={"coordinate_constraint", "atom_pair_constraint", \
+        "angle_constraint", "dihedral_constraint"}):
     scores = dict()
     for score_term in score_terms:
         scores[score_term] = energy_metric(score_function, pose, score_type=score_term)
@@ -1048,7 +1050,7 @@ def run_job_distributor(score_function, pose, fold_tree, chi_dihedrals:list, \
             rotamer_index = np.random.randint(1, len(cloud_pdb_lines) - 1)
             rotamer_lines = cloud_pdb_lines[rotamer_index]
             del cloud_pdb_lines[rotamer_index]
-            tmp_pdb = output_filename_prefix + "_" + str(i_decoy) + ".tmp.pdb"
+            tmp_pdb = output_filename_prefix + "." + str(i_decoy) + "_tmp.pdb"
             with open(tmp_pdb, "w") as p_pdb:
                 p_pdb.writelines(cloud_pdb_lines[0])
                 p_pdb.writelines(rotamer_lines)
