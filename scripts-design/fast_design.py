@@ -1140,7 +1140,7 @@ def main(args):
     # Get pose indices of enzdes positions.
     enzdes_pose_indices = set()
     # if args.enzyme_design_constraints:
-    if args.ddG_reference_pdb:
+    if args.ddG_reference_pdb and args.ddG_reference_pdb != "True":
         enzdes_substrate_pose_indices, enzdes_res_pose_indices = get_enzdes_pose_indices(\
                 ddG_ref_pose.pdb_info(), args.ddG_reference_pdb, args.symmetry)
     else:
