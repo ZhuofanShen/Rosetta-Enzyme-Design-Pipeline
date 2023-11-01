@@ -401,7 +401,6 @@ def create_constraints(pose, constraint_atoms, constraint_parameters, bounded_di
         else:
             bounded_distance = None
         # Get atoms.
-        constraints_pose_indices = list()
         current_cst_atoms = constraint_atoms[cst_first_atom:cst_first_atom + length]
         atom_names = list()
         try:
@@ -411,20 +410,23 @@ def create_constraints(pose, constraint_atoms, constraint_parameters, bounded_di
                 pose_index, atom_name = pose_index_atom_name.split(",")
                 pose_indices.append(int(pose_index))
                 atom_names.append(atom_name)
-            constraints_pose_indices.append(pose_indices)
+            pose_indices_list = [pose_indices]
         except: # Select possibly multiple residues by residue identity.
-            cst_residue_name3 = None
+            pose_indices_list = list()
             for cst_atom in current_cst_atoms:
                 residue_name3, atom_name = cst_atom.split(",")
-                if not cst_residue_name3:
-                    cst_residue_name3 = residue_name3
-                elif cst_residue_name3 != residue_name3:
-                    raise Exception("The residue identities assigned to the constraint are not consistent.")
                 atom_names.append(atom_name)
-            for pose_index in residue_name3_selector(pose, [cst_residue_name3]):
-                constraints_pose_indices.append([int(pose_index)] * len(atom_names))
+                new_pose_indices = residue_name3_selector(pose, [residue_name3])
+                if len(pose_indices_list) == 0:
+                    pose_indices_list = list([int(new_pose_index)] for new_pose_index in new_pose_indices)
+                else:
+                    new_pose_indices_list = list()
+                    for pose_indices in pose_indices_list:
+                        for new_pose_index in new_pose_indices:
+                            new_pose_indices_list.append(pose_indices + [int(new_pose_index)])
+                    pose_indices_list = new_pose_indices_list
         finally:
-            for pose_indices in constraints_pose_indices:
+            for pose_indices in pose_indices_list:
                 if len(atom_names) == 2:
                     constraint = create_harmonic_constraint(pose, atom_names, pose_indices, value, \
                             standard_deviation, bounded_distance=bounded_distance)
@@ -434,8 +436,7 @@ def create_constraints(pose, constraint_atoms, constraint_parameters, bounded_di
                 constraints.append(constraint)
     return constraints
 
-def create_enzdes_cst():
-# Add enzdes constraints
+def create_enzdes_constraints():
     enz_cst = AddOrRemoveMatchCsts()
     enz_cst.set_cst_action(ADD_NEW)
     return enz_cst
@@ -803,10 +804,10 @@ def load_pdb_as_pose(score_function, pdb:str, fold_tree, chi_dihedrals:list, \
     set_chi_dihedral(pose, chi_dihedrals)
     # Apply symmetry if specified.
     set_symmetry(symmetry, pose)
-    # Read constraint files from the command line.
+    # Read constraint files from the command line and apply to pose.
     if constraint_file:
         add_fa_constraints_from_cmdline(pose, score_function)
-    # Apply constraints on-the-fly.
+    # Apply geometry constraints.
     for geometry_constraint in geometry_constraints:
         pose.add_constraint(geometry_constraint)
     # Apply coordinate constraints, EnzDes constraints and AA type constraints.
@@ -1139,8 +1140,12 @@ def main(args):
     # Get pose indices of enzdes positions.
     enzdes_pose_indices = set()
     # if args.enzyme_design_constraints:
-    enzdes_substrate_pose_indices, enzdes_res_pose_indices = get_enzdes_pose_indices(\
-            pose.pdb_info(), args.pdb, args.symmetry)
+    if args.ddG_reference_pdb:
+        enzdes_substrate_pose_indices, enzdes_res_pose_indices = get_enzdes_pose_indices(\
+                ddG_ref_pose.pdb_info(), args.ddG_reference_pdb, args.symmetry)
+    else:
+        enzdes_substrate_pose_indices, enzdes_res_pose_indices = get_enzdes_pose_indices(\
+                pose.pdb_info(), args.pdb, args.symmetry)
     enzdes_pose_indices = enzdes_substrate_pose_indices.union(enzdes_res_pose_indices)
     if args.enzdes_substrates_transformations:
         rigid_body_tform_pose_indices.update(enzdes_substrate_pose_indices)
@@ -1162,15 +1167,7 @@ def main(args):
     if len(rigid_body_tform_pose_indices) > 0:
         rigid_body_tform_jump_edges = pose_indices_to_jump_edges(fold_tree, \
                 rigid_body_tform_pose_indices)
-    # Set chi dihedrals.
-    set_chi_dihedral(pose, args.chi_dihedrals)
-    # Apply symmetry if specified.
-    n_monomers = set_symmetry(args.symmetry, pose, coord_ref_pose, ddG_ref_pose, \
-            sequence_length=sequence_length)
-    # Read constraint files from the command line.
-    if args.constraint_file:
-        add_fa_constraints_from_cmdline(pose, score_function)
-    # Add constraints on-the-fly.
+    # Create geometry constraints on-the-fly.
     geometry_constraints = list()
     if args.distance_constraint_atoms:
         geometry_constraints.extend(create_constraints(pose, args.distance_constraint_atoms, \
@@ -1182,8 +1179,11 @@ def main(args):
     if args.dihedral_constraint_atoms:
         geometry_constraints.extend(create_constraints(pose, args.dihedral_constraint_atoms, \
                 args.dihedral_constraint_parameters))
-    for geometry_constraint in geometry_constraints:
-        pose.add_constraint(geometry_constraint)
+    # Set chi dihedrals.
+    set_chi_dihedral(pose, args.chi_dihedrals)
+    # Apply symmetry if specified.
+    n_monomers = set_symmetry(args.symmetry, pose, coord_ref_pose, ddG_ref_pose, \
+            sequence_length=sequence_length)
     # Create the task factory.
     task_factory, mutators, min_shell_focus_selection = create_task_factory(\
             nopack_positions=static_pose_indices, \
@@ -1236,9 +1236,15 @@ def main(args):
     add_csts.add_generator(all_atom_coord_cst_gen)
     add_csts.apply(pose)
     constraints.append(add_csts)
-    # Add enzyme design constraints.
+    # Read constraint files from the command line and apply to pose.
+    if args.constraint_file:
+        add_fa_constraints_from_cmdline(pose, score_function)
+    # Apply geometry constraints.
+    for geometry_constraint in geometry_constraints:
+        pose.add_constraint(geometry_constraint)
+    # Apply enzyme design constraints.
     if args.enzyme_design_constraints:
-        enzdes_cst = create_enzdes_cst()
+        enzdes_cst = create_enzdes_constraints()
         enzdes_cst.apply(pose)
         constraints.append(enzdes_cst)
     # Favor native AA types.
@@ -1280,10 +1286,11 @@ def main(args):
         if args.enzyme_design_constraints:
             print(enzdes_substrate_pose_indices)
             print(enzdes_res_pose_indices)
-        print(task_factory.create_task_and_apply_taskoperations(pose))
+        packer_task = task_factory.create_task_and_apply_taskoperations(pose)
+        packer_task.show()
         if type(move_map) == MoveMapFactory:
             move_map = move_map.create_movemap_from_pose(pose)
-        print(move_map)
+        move_map.show()
         print(score_function.show(pose))
     elif args.save_n_decoys:
         run_job(score_function, pose, fold_tree, args.chi_dihedrals, \
