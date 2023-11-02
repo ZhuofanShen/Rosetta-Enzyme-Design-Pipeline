@@ -909,7 +909,8 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
         scores = read_scores_from_pdb(filename, theozyme_positions=theozyme_positions)
         filename_split = filename.split(".")
         if filename.endswith("_checkpoint.pdb"):
-            checkpoint_filename_scores[filename] = read_scores_from_pdb(filename)
+            checkpoint_filename_scores[filename] = read_scores_from_pdb(filename, \
+                    theozyme_positions=theozyme_positions)
         elif len(filename_split) >= 3 and filename_split[-2].isdigit():
             ith_ranked_decoy = int(filename_split[-2])
             now_saved_n_decoys = len(decoy_scores_list)
@@ -925,7 +926,8 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
             if filename.endswith("_tmp.pdb"):
                 os.remove(filename)
             else:
-                checkpoint_filename_scores[filename] = read_scores_from_pdb(filename)
+                checkpoint_filename_scores[filename] = read_scores_from_pdb(filename, \
+                        theozyme_positions=theozyme_positions)
     first_checkpoint = True
     for filename, scores in sorted(checkpoint_filename_scores.items(), key=lambda x: x[1]["total_score"]):
         if not first_checkpoint:
