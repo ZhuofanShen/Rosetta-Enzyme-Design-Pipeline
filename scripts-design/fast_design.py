@@ -900,7 +900,6 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
         output_filename_prefix:str=None, wildtype_sequence:str=str()):
     if not output_filename_prefix:
         output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
-    n_finished_decoys = 0
     decoy_scores_list = [None] * save_n_decoys
     decoy_filenames_list = [None] * save_n_decoys
     checkpoint_filename_scores = dict()
@@ -909,7 +908,7 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
         scores = read_scores_from_pdb(filename, theozyme_positions=theozyme_positions)
         filename_split = filename.split(".")
         if filename.endswith("_checkpoint.pdb"):
-            checkpoint_filename_scores[filename] = read_scores_from_pdb(filename)
+            checkpoint_filename_scores[filename] = scores
         elif len(filename_split) >= 3 and filename_split[-2].isdigit():
             ith_ranked_decoy = int(filename_split[-2])
             now_saved_n_decoys = len(decoy_scores_list)
@@ -925,52 +924,54 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
             if filename.endswith("_tmp.pdb"):
                 os.remove(filename)
             else:
-                checkpoint_filename_scores[filename] = read_scores_from_pdb(filename)
-    first_checkpoint = True
+                checkpoint_filename_scores[filename] = scores
+    checkpoint_saved = False
     for filename, scores in sorted(checkpoint_filename_scores.items(), key=lambda x: x[1]["total_score"]):
-        if not first_checkpoint:
-            os.remove(filename)
+        if checkpoint_saved:
+            raise Exception("More than one checkpoint file found in the current directory!")
         if filename.endswith("_checkpoint.pdb"):
             n_finished_decoys = min(int(filename[:-4].split(".")[-1].split("_")[0]), n_decoys)
-            output_filename = filename[:filename[:-4].rfind(".")] + ".pdb"
-            if filename != output_filename:
-                os.rename(filename, output_filename)
-                filename = output_filename
         else:
             n_finished_decoys = n_decoys
         decoy_scores_list[0] = scores
         decoy_filenames_list[0] = filename
-        first_checkpoint = False
-    if n_finished_decoys == n_decoys:
-        with open(output_filename_prefix + ".sc", "w") as pf:
-            for filename, scores in zip(decoy_filenames_list, decoy_scores_list):
-                scores["decoy"] = filename
-                pf.write(json.dumps(scores) + "\n")
-    checkpoint_saved = True
-    if decoy_filenames_list[0] == None:
-        checkpoint_saved = False
+        checkpoint_saved = True
     decoy_scores_list = list(filter(lambda sc: sc, decoy_scores_list))
     decoy_filenames_list = list(filter(lambda fn: fn, decoy_filenames_list))
-    if len(decoy_filenames_list) == 0:
-        checkpoint_saved = True
+    now_saved_n_decoys = len(decoy_filenames_list)
+    if now_saved_n_decoys >= save_n_decoys:
+        decoy_scores_list = decoy_scores_list[:save_n_decoys]
+        decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
     if not checkpoint_saved:
-        n_finished_decoys = len(decoy_filenames_list)
-        ranked_decoy_filename = decoy_filenames_list[0]
-        checkpoint_filename = ranked_decoy_filename[:ranked_decoy_filename[:-4].rfind(".")] + \
-                "." + str(n_finished_decoys) + "_checkpoint.pdb"
-        os.rename(ranked_decoy_filename, checkpoint_filename)
-        decoy_filenames_list[0] = checkpoint_filename
+        n_finished_decoys = now_saved_n_decoys
+    now_unsaved_n_decoys = save_n_decoys - now_saved_n_decoys
+    n_unfinished_decoys = n_decoys - n_finished_decoys
+    if now_unsaved_n_decoys > n_unfinished_decoys:
+        n_decoys += now_unsaved_n_decoys - n_unfinished_decoys
     for load_index, ranked_decoy_filename in enumerate(decoy_filenames_list[1:]):
         new_ranked_decoy_filename = ranked_decoy_filename[:ranked_decoy_filename[:-4].rfind(".")] + \
                 "." + str(load_index + 2) + ".pdb"
-        if load_index + 2 > save_n_decoys:
-            os.remove(ranked_decoy_filename)
-        elif new_ranked_decoy_filename != ranked_decoy_filename:
+        if new_ranked_decoy_filename != ranked_decoy_filename:
             os.rename(ranked_decoy_filename, new_ranked_decoy_filename)
             decoy_filenames_list[load_index + 1] = new_ranked_decoy_filename
-    if len(decoy_filenames_list) > save_n_decoys:
-        decoy_scores_list = decoy_scores_list[:save_n_decoys]
-        decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
+    if len(decoy_filenames_list) > 0:
+        checkpoint_filename = decoy_filenames_list[0]
+        new_checkpoint_filename = None
+        i = checkpoint_filename[:-4].rfind(".")
+        if i == -1:
+            i = -4
+        if n_finished_decoys < n_decoys and not checkpoint_filename.endswith("_checkpoint.pdb"):
+            new_checkpoint_filename = checkpoint_filename[:i] + "." + \
+                    str(n_finished_decoys) + "_checkpoint.pdb"
+        elif n_finished_decoys == n_decoys and i != -4:
+            new_checkpoint_filename = checkpoint_filename[:i] + ".pdb"
+        if new_checkpoint_filename:
+            os.rename(checkpoint_filename, new_checkpoint_filename)
+            decoy_filenames_list[0] = new_checkpoint_filename
+    with open(output_filename_prefix + ".sc", "w") as pf:
+        for filename, scores in zip(decoy_filenames_list, decoy_scores_list):
+            scores["decoy"] = filename
+            pf.write(json.dumps(scores) + "\n")
     for i_decoy in range(n_finished_decoys + 1, n_decoys + 1):
         if cloud_pdb_lines:
             if len(cloud_pdb_lines) > 2:
