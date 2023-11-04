@@ -219,11 +219,21 @@ def pdb_to_pose_numbering(pose, chain_id_pdb_indices):
 
 def residue_name3_selector(pose, name3_list, sequence_length:int=None):
     pose_indices = set()
-    for pose_index in range(1, len(pose.sequence()) + 1):
-        if pose.residue(pose_index).name3() in name3_list:
-            if sequence_length and pose_index > sequence_length:
-                continue
-            pose_indices.add(str(pose_index))
+    name3_chain_id_dict = dict()
+    for name3 in name3_list:
+        if "-" in name3:
+            chain_id, name3 = name3.split("-")
+            name3_chain_id_dict[name3] = set(chain_id)
+        else:
+            name3_chain_id_dict[name3] = set()
+    pdb_info = pose.pdb_info()
+    for pose_index in list(range(1, len(pose.sequence()) + 1))[:sequence_length]:
+        name3 = pose.residue(pose_index).name3()
+        chain_id_set = name3_chain_id_dict.get(name3)
+        if chain_id_set is not None:
+            chain_id = pdb_info.pose2pdb(pose_index).split(" ")[1]
+            if len(chain_id_set) == 0 or chain_id in chain_id_set:
+                pose_indices.add(str(pose_index))
     return pose_indices
 
 def create_fold_tree(edges):
@@ -317,7 +327,7 @@ def create_harmonic_constraint(pose, atom_names, pose_indices, distance, standar
     atom_list = list()
     for atom_name, residue_id in zip(atom_names, pose_indices):
         atom_list.append(AtomID(pose.residue(residue_id).atom_index(atom_name), residue_id))
-    if type(distance) is list or type(distance) is np.ndarray:
+    if type(distance) is np.ndarray:
         assert len(distance) == len(standard_deviation)
         harmonic_cst = AmbiguousConstraint()
         for i_nested, dis_sd in enumerate(zip(distance, standard_deviation)):
@@ -475,9 +485,8 @@ def pose_indices_to_jump_edges(fold_tree, rigid_body_tform_pose_indices):
     jump_edges = set()
     for rigid_body_tform_pose_index in rigid_body_tform_pose_indices:
         jump_edge = fold_tree.get_residue_edge(int(rigid_body_tform_pose_index))
-        if not jump_edge.is_jump():
-            raise Exception("The specified edge is not a jump edge.")
-        jump_edges.add(jump_edge.label())
+        if jump_edge.is_jump():
+            jump_edges.add(jump_edge.label())
     return jump_edges
 
 def index_boolean_filter(index, boolean):
@@ -1116,6 +1125,17 @@ def main(args):
         os.remove(args.pdb[:-4] + ".tmp.pdb")
     else:
         cloud_pdb_lines = None
+    # Set fold tree.
+    if not args.fold_tree and not args.alter_jump_edges:
+        fold_tree = pose.fold_tree()
+    else:
+        if args.fold_tree:
+            fold_tree = create_fold_tree(args.fold_tree)
+        elif args.alter_jump_edges:
+            fold_tree = alter_fold_tree_jump_edges(pose.fold_tree(), args.alter_jump_edges)
+        pose.fold_tree(fold_tree)
+    # Set chi dihedrals.
+    set_chi_dihedral(pose, args.chi_dihedrals)
     # Get sequences information.
     wildtype_sequence = pose.sequence()
     sequence_length = len(wildtype_sequence)
@@ -1128,66 +1148,67 @@ def main(args):
     else:
         truncate_sequence_end = 0
     # Convert pdb numberings to pose numberings.
-    # Any ddG_ref_pose redundant positions in the site-directed residue actions, 
-    # i.e., -static, -mut and -des, will be ignored.
+    # Any ddG_ref_pose redundant positions in -static, -mut and -des will be ignored.
     static_pose_indices, _ = pdb_to_pose_numbering(pose, args.static_residues)
     if args.static_residue_identities:
         static_pose_indices.update(residue_name3_selector(pose, args.static_residue_identities, \
                 sequence_length=sequence_length))
     mutation_pose_indices, _ = pdb_to_pose_numbering(pose, args.mutations)
     design_pose_indices, _ = pdb_to_pose_numbering(pose, args.design_residues)
-    # Get pose indices of substrates and catalytic residues.
-    theozyme_pose_indices = set()
+    # Select residue by name3 reference pose.
+    if args.ddG_reference_pdb:
+        res_name3_ref_pose = ddG_ref_pose
+        enzdes_ref_pdb = args.pdb
+    else:
+        res_name3_ref_pose = pose
+        enzdes_ref_pdb = args.ddG_reference_pdb
     rigid_body_tform_pose_indices = set()
+    # Get substrates and catalytic residues pose indices.
+    # Theozyme_pose_indices will include ddG_ref_pose redundant positions.
+    theozyme_pose_indices = set()
     if args.catalytic_residues:
         catalytic_residue_pose_indices, _ = pdb_to_pose_numbering(pose, args.catalytic_residues)
         theozyme_pose_indices.update(catalytic_residue_pose_indices)
     if args.catalytic_residue_identities:
-        catalytic_residue_by_id_pose_indices = residue_name3_selector(pose, args.catalytic_residue_identities)
-        theozyme_pose_indices.update(catalytic_residue_by_id_pose_indices)
+        cat_id_pose_indices = residue_name3_selector(res_name3_ref_pose, args.catalytic_residue_identities)
+        theozyme_pose_indices.update(cat_id_pose_indices)
     if args.substrates:
         substrate_pose_indices, jump_pose_indices = pdb_to_pose_numbering(pose, args.substrates)
         theozyme_pose_indices.update(substrate_pose_indices)
         if args.substrate_rigid_body_transformations:
             rigid_body_tform_pose_indices.update(jump_pose_indices)
     if args.substrate_identities:
-        substrate_by_id_pose_indices = residue_name3_selector(pose, args.substrate_identities)
-        theozyme_pose_indices.update(substrate_by_id_pose_indices)
+        substrate_id_pose_indices = residue_name3_selector(res_name3_ref_pose, args.substrate_identities)
+        theozyme_pose_indices.update(substrate_id_pose_indices)
         if args.substrate_rigid_body_transformations:
-            rigid_body_tform_pose_indices.update(substrate_by_id_pose_indices)
-        if args.ddG_reference_pdb:
-            theozyme_pose_indices.update(residue_name3_selector(ddG_ref_pose, args.substrate_identities))
-    # Get pose indices of enzdes positions.
+            rigid_body_tform_pose_indices.update(substrate_id_pose_indices)
+    # Get EnzDes positions pose indices.
+    # Enzdes_pose_indices will include ddG_ref_pose redundant positions.
     enzdes_pose_indices = set()
-    # if args.enzyme_design_constraints:
-    if args.ddG_reference_pdb and args.ddG_reference_pdb != "True":
-        enzdes_substrate_pose_indices, enzdes_res_pose_indices = get_enzdes_pose_indices(\
-                ddG_ref_pose.pdb_info(), args.ddG_reference_pdb, args.symmetry)
-    else:
-        enzdes_substrate_pose_indices, enzdes_res_pose_indices = get_enzdes_pose_indices(\
-                pose.pdb_info(), args.pdb, args.symmetry)
+    enzdes_substrate_pose_indices, enzdes_res_pose_indices = get_enzdes_pose_indices(\
+            res_name3_ref_pose.pdb_info(), enzdes_ref_pdb, args.symmetry)
     enzdes_pose_indices = enzdes_substrate_pose_indices.union(enzdes_res_pose_indices)
     if args.enzdes_substrates_transformations:
         rigid_body_tform_pose_indices.update(enzdes_substrate_pose_indices)
-    # Get all theozyme positions.
-    nonredundant_theozyme_pose_indices = set(filter(lambda index: int(index) \
+    # Exclude ddG_ref_pose redundant positions and static positions.
+    pre_minimization_pose_indices = set(filter(lambda index: int(index) \
             <= sequence_length, theozyme_pose_indices.union(enzdes_pose_indices)))
-    # Set fold tree.
-    if not args.fold_tree and not args.alter_jump_edges:
-        fold_tree = pose.fold_tree()
-    else:
-        if args.fold_tree:
-            fold_tree = create_fold_tree(args.fold_tree)
-        elif args.alter_jump_edges:
-            fold_tree = alter_fold_tree_jump_edges(pose.fold_tree(), args.alter_jump_edges)
-        pose.fold_tree(fold_tree)
-    # Rigid body transformations.
+    pre_minimization_pose_indices = pre_minimization_pose_indices - static_pose_indices
+    rigid_body_tform_pose_indices = set(filter(lambda index: int(index) \
+            <= sequence_length, rigid_body_tform_pose_indices))
     rigid_body_tform_pose_indices = rigid_body_tform_pose_indices - static_pose_indices
+    # Rigid body transformations.
     rigid_body_tform_jump_edges = set()
     if len(rigid_body_tform_pose_indices) > 0:
         rigid_body_tform_jump_edges = pose_indices_to_jump_edges(fold_tree, \
                 rigid_body_tform_pose_indices)
-    # Create geometry constraints on-the-fly.
+    # Apply symmetry if specified.
+    n_monomers = set_symmetry(args.symmetry, pose, coord_ref_pose, ddG_ref_pose, \
+            sequence_length=sequence_length)
+    # Read constraint files from the command line and apply to pose.
+    if args.constraint_file:
+        add_fa_constraints_from_cmdline(pose, score_function)
+    # Add geometry constraints on-the-fly.
     geometry_constraints = list()
     if args.distance_constraint_atoms:
         geometry_constraints.extend(create_constraints(pose, args.distance_constraint_atoms, \
@@ -1199,11 +1220,8 @@ def main(args):
     if args.dihedral_constraint_atoms:
         geometry_constraints.extend(create_constraints(pose, args.dihedral_constraint_atoms, \
                 args.dihedral_constraint_parameters))
-    # Set chi dihedrals.
-    set_chi_dihedral(pose, args.chi_dihedrals)
-    # Apply symmetry if specified.
-    n_monomers = set_symmetry(args.symmetry, pose, coord_ref_pose, ddG_ref_pose, \
-            sequence_length=sequence_length)
+    for geometry_constraint in geometry_constraints:
+        pose.add_constraint(geometry_constraint)
     # Create the task factory.
     task_factory, mutators, min_shell_focus_selection = create_task_factory(\
             nopack_positions=static_pose_indices, \
@@ -1256,13 +1274,7 @@ def main(args):
     add_csts.add_generator(all_atom_coord_cst_gen)
     add_csts.apply(pose)
     constraints.append(add_csts)
-    # Read constraint files from the command line and apply to pose.
-    if args.constraint_file:
-        add_fa_constraints_from_cmdline(pose, score_function)
-    # Apply geometry constraints.
-    for geometry_constraint in geometry_constraints:
-        pose.add_constraint(geometry_constraint)
-    # Apply enzyme design constraints.
+    # Add enzyme design constraints.
     if args.enzyme_design_constraints:
         enzdes_cst = create_enzdes_constraints()
         enzdes_cst.apply(pose)
@@ -1282,7 +1294,6 @@ def main(args):
     movers.extend(mutators)
     # Perform pre-minimization.
     assembly_length = len(pose.sequence())
-    pre_minimization_pose_indices = nonredundant_theozyme_pose_indices - static_pose_indices
     if args.pre_minimization and len(pre_minimization_pose_indices) > 0:
         pre_minimizer = create_pre_minimizer(score_function, assembly_length, \
                 pre_minimization_pose_indices, jump_edges=rigid_body_tform_jump_edges)
@@ -1317,7 +1328,7 @@ def main(args):
                 args.constraint_file, geometry_constraints, constraints, \
                 args.symmetry, movers, cloud_pdb_lines=cloud_pdb_lines, \
                 n_decoys=args.n_decoys, save_n_decoys=args.save_n_decoys, \
-                theozyme_positions=nonredundant_theozyme_pose_indices, \
+                theozyme_positions=pre_minimization_pose_indices, \
                 output_filename_prefix=args.output_filename_prefix, \
                 wildtype_sequence=wildtype_sequence)
     else:
