@@ -810,7 +810,7 @@ def load_pdb_as_pose(score_function, pdb:str, fold_tree, chi_dihedrals:list, \
     # Apply geometry constraints.
     for geometry_constraint in geometry_constraints:
         pose.add_constraint(geometry_constraint)
-    # Apply EnzDes constraints, coordinate constraints and AA type constraints.
+    # Apply coordinate constraints, EnzDes constraints and AA type constraints.
     for constraint in constraints:
         constraint.apply(pose)
     return pose
@@ -1187,8 +1187,6 @@ def main(args):
     if len(rigid_body_tform_pose_indices) > 0:
         rigid_body_tform_jump_edges = pose_indices_to_jump_edges(fold_tree, \
                 rigid_body_tform_pose_indices)
-    # Set chi dihedrals.
-    set_chi_dihedral(pose, args.chi_dihedrals)
     # Create geometry constraints on-the-fly.
     geometry_constraints = list()
     if args.distance_constraint_atoms:
@@ -1201,22 +1199,11 @@ def main(args):
     if args.dihedral_constraint_atoms:
         geometry_constraints.extend(create_constraints(pose, args.dihedral_constraint_atoms, \
                 args.dihedral_constraint_parameters))
+    # Set chi dihedrals.
+    set_chi_dihedral(pose, args.chi_dihedrals)
     # Apply symmetry if specified.
     n_monomers = set_symmetry(args.symmetry, pose, coord_ref_pose, ddG_ref_pose, \
             sequence_length=sequence_length)
-    # Read constraint files from the command line and apply to pose.
-    if args.constraint_file:
-        add_fa_constraints_from_cmdline(pose, score_function)
-    # Apply geometry constraints.
-    for geometry_constraint in geometry_constraints:
-        pose.add_constraint(geometry_constraint)
-    # List of EnzDes constraints, coordinate constraints and AA type constraints.
-    constraints = list()
-    # Apply enzyme design constraints.
-    if args.enzyme_design_constraints:
-        enzdes_cst = create_enzdes_constraints()
-        enzdes_cst.apply(pose)
-        constraints.append(enzdes_cst)
     # Create the task factory.
     task_factory, mutators, min_shell_focus_selection = create_task_factory(\
             nopack_positions=static_pose_indices, \
@@ -1234,6 +1221,8 @@ def main(args):
             excluded_amino_acid_types=args.excluded_amino_acid_types, \
             noncanonical_amino_acids=args.noncanonical_amino_acids, \
             allow_ncaa_in_design=args.allow_ncaa_in_design)
+    # List of coordinate constraints, EnzDes constraints and AA type constraints.
+    constraints = list()
     # Add coordinate constraints.
     no_coord_cst_selection = OrResidueSelector()
     no_coord_cst_residues, _ = pdb_to_pose_numbering(pose, \
@@ -1267,6 +1256,17 @@ def main(args):
     add_csts.add_generator(all_atom_coord_cst_gen)
     add_csts.apply(pose)
     constraints.append(add_csts)
+    # Read constraint files from the command line and apply to pose.
+    if args.constraint_file:
+        add_fa_constraints_from_cmdline(pose, score_function)
+    # Apply geometry constraints.
+    for geometry_constraint in geometry_constraints:
+        pose.add_constraint(geometry_constraint)
+    # Apply enzyme design constraints.
+    if args.enzyme_design_constraints:
+        enzdes_cst = create_enzdes_constraints()
+        enzdes_cst.apply(pose)
+        constraints.append(enzdes_cst)
     # Favor native AA types.
     if args.favor_native_residue and (args.design_residues or args.design_binding_site):
         favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
