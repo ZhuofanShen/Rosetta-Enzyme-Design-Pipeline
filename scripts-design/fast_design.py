@@ -1039,7 +1039,6 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
             os.rename(old_checkpoint_filename, checkpoint_filename)
             decoy_filenames_list[0] = checkpoint_filename
             if insert_index < save_n_decoys:
-                decoy_filenames_list[0] = checkpoint_filename
                 for move_index in range(len(decoy_filenames_list), insert_index, -1):
                     ranked_decoy_filename = decoy_filenames_list[move_index - 1]
                     new_ranked_decoy_filename = ranked_decoy_filename\
@@ -1048,17 +1047,18 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
                     decoy_filenames_list[move_index - 1] = new_ranked_decoy_filename
                 current_output_filename += "." + str(insert_index + 1) + ".pdb"
             else:
-                continue
-        scores = calculate_pose_scores(pose_copy, score_function, theozyme_positions=theozyme_positions)
-        scores["total_score"] = current_score
-        decoy_scores_list = decoy_scores_list[:insert_index] + [scores] + decoy_scores_list[insert_index:]
-        pose_copy.dump_pdb(current_output_filename)
-        decoy_filenames_list = decoy_filenames_list[:insert_index] + [current_output_filename] + \
-                decoy_filenames_list[insert_index:]
-        if len(decoy_filenames_list) > save_n_decoys:
-            decoy_scores_list = decoy_scores_list[:save_n_decoys]
-            os.remove(decoy_filenames_list[save_n_decoys])
-            decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
+                current_output_filename = None
+        if current_output_filename:
+            scores = calculate_pose_scores(pose_copy, score_function, theozyme_positions=theozyme_positions)
+            scores["total_score"] = current_score
+            decoy_scores_list = decoy_scores_list[:insert_index] + [scores] + decoy_scores_list[insert_index:]
+            pose_copy.dump_pdb(current_output_filename)
+            decoy_filenames_list = decoy_filenames_list[:insert_index] + [current_output_filename] + \
+                    decoy_filenames_list[insert_index:]
+            if len(decoy_filenames_list) > save_n_decoys:
+                decoy_scores_list = decoy_scores_list[:save_n_decoys]
+                os.remove(decoy_filenames_list[save_n_decoys])
+                decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
         with open(output_filename_prefix + ".sc", "w") as pf:
             for filename, scores in zip(decoy_filenames_list, decoy_scores_list):
                 scores["decoy"] = filename
