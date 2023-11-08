@@ -258,9 +258,9 @@ def create_residue_mutators(mutations, noncanonical_amino_acids:list=list(), \
     mutators = list()
     mutation_pose_indices = set()
     for mutation in mutations:
+        mutating_position, target_AA = mutation.split(",")
         mutation_pose_indices.add(mutating_position)
         if not ddG_wildtype:
-            mutating_position, target_AA = mutation.split(",")
             mutator = MutateResidue()
             mutator.set_selector(ResidueIndexSelector(mutating_position))
             target_AA_name3 = AA_1to3_dict.get(target_AA)
@@ -1175,6 +1175,7 @@ def main(args):
                 sequence_length=sequence_length))
     pre_mutations, _ = pdb_to_pose_numbering(pose, args.pre_mutations)
     mutations, _ = pdb_to_pose_numbering(pose, args.mutations)
+    mutations = mutations - pre_mutations
     design_pose_indices, _ = pdb_to_pose_numbering(pose, args.design_residues)
     # Classify NCAA mutations and static mutations into pre-mutations.
     static_ncaa_mutations = set()
