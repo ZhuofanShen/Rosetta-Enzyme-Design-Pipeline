@@ -32,10 +32,14 @@ from pyrosetta.rosetta.protocols.constraint_generator import \
     AddConstraints, CoordinateConstraintGenerator
 from pyrosetta.rosetta.protocols.enzdes import ADD_NEW, \
     AddOrRemoveMatchCsts
-from pyrosetta.rosetta.protocols.protein_interface_design import \
-    FavorNativeResidue
+from pyrosetta.rosetta.protocols.membrane import \
+    AddMembraneMover
+from pyrosetta.rosetta.protocols.membrane.symmetry import \
+    SymmetricAddMembraneMover
 from pyrosetta.rosetta.protocols.minimization_packing import \
     PackRotamersMover, MinMover
+from pyrosetta.rosetta.protocols.protein_interface_design import \
+    FavorNativeResidue
 from pyrosetta.rosetta.protocols.relax import FastRelax
 from pyrosetta.rosetta.protocols.simple_moves import MutateResidue
 from pyrosetta.rosetta.protocols.symmetry import SetupForSymmetryMover
@@ -50,6 +54,8 @@ def parse_arguments():
     parser.add_argument("-ddG_ref", "--ddG_reference_pdb", type=str)
     parser.add_argument("-params", "--parameters_files", type=str, nargs="*")
     parser.add_argument("-optH", "--optimize_protonation_state", action="store_true")
+    parser.add_argument("-symm", "--symmetry", type=str)
+    parser.add_argument("-span", "--membrane_span_file", type=str)
     parser.add_argument("-sf", "--score_function", type=str, default="ref2015_cst", \
             help="$base_$soft_$cart_$cst")
     parser.add_argument("--score_terms", type=str, nargs="*", default=list())
@@ -62,7 +68,6 @@ def parse_arguments():
             "[$edge,$atom1,$atom2] or [$edge,$upstream_edge] or [$edge,$upstream_edge,$atom1,$atom2] * n")
     parser.add_argument("-chis", "--chi_dihedrals", type=str, nargs="*", default=list(), \
             help="$chain$residue_index,$chi,$degree or $residue_name3,$chi,$degree")
-    parser.add_argument("-symm", "--symmetry", type=str)
     parser.add_argument("-coord_cst_sd", "--coordinate_constraints_standard_deviation", type=float, \
             default=0.5)
     parser.add_argument("-bounded_coord_cst", "--bounded_coordinate_constraints", type=float)
@@ -518,6 +523,26 @@ def pose_indices_to_jump_edges(fold_tree, rigid_body_tform_pose_indices):
             jump_edges.add(jump_edge.label())
     return jump_edges
 
+def apply_symmetry_membrane(symmetry:str, membrane_span_file:str, *pose_list, sequence_length:int=0):
+    if symmetry:
+        sfsm = SetupForSymmetryMover(symmetry)
+        sfsm.set_keep_pdb_info_labels(True)
+        n_monomers = None
+        for pose in filter(lambda p: p is not None, pose_list):
+            sfsm.apply(pose)
+            if not n_monomers and sequence_length > 0:
+                n_monomers = round(len(pose.sequence().strip("X")) / sequence_length)
+    else:
+        n_monomers = 1
+    if membrane_span_file:
+        if symmetry:
+            add_membrane = SymmetricAddMembraneMover(membrane_span_file)
+        else:
+            add_membrane = AddMembraneMover(membrane_span_file)
+        for pose in filter(lambda p: p is not None, pose_list):
+            add_membrane.apply(pose)
+    return n_monomers
+
 def index_boolean_filter(index, boolean):
     if type(boolean) == np.ndarray:
         for bool in boolean:
@@ -545,19 +570,6 @@ def boolean_vector_to_indices_set(boolean_vector, n_monomers:int=1, \
     else:
         return indices
 
-def set_symmetry(symmetry:str, *pose_list, sequence_length:int=0):
-    if symmetry:
-        sfsm = SetupForSymmetryMover(symmetry)
-        sfsm.set_keep_pdb_info_labels(True)
-        n_monomers = None
-        for pose in filter(lambda p: p is not None, pose_list):
-            sfsm.apply(pose)
-            if not n_monomers and sequence_length > 0:
-                n_monomers = round(len(pose.sequence().strip("X")) / sequence_length)
-    else:
-        n_monomers = 1
-    return n_monomers
-
 def select_neighborhood_region(focus_selection, include_focus: bool, method:str="vector"):
     if method == "vector":
         neighborhood_selection = InterGroupInterfaceByVectorSelector()
@@ -576,7 +588,7 @@ def select_neighborhood_region(focus_selection, include_focus: bool, method:str=
         neighborhood_selection.set_include_focus_in_subset(include_focus)
     return neighborhood_selection
 
-def create_pre_minimizer(score_function, assembly_length, pre_minimization_pose_indices, \
+def create_pre_minimization_move_map(assembly_length, pre_minimization_pose_indices, \
         jump_edges:set=set()):
     pre_minimization_vector = vector1_bool(assembly_length)
     for pose_index in pre_minimization_pose_indices:
@@ -586,13 +598,7 @@ def create_pre_minimizer(score_function, assembly_length, pre_minimization_pose_
     move_map.set_chi(pre_minimization_vector)
     for jump_edge in jump_edges:
         move_map.set_jump(jump_edge, True)
-    pre_minimizer = MinMover()
-    pre_minimizer.score_function(score_function)
-    pre_minimizer.min_type("lbfgs_armijo_nonmonotone")
-    if score_function.get_weight(ScoreType.cart_bonded) > 0:
-        pre_minimizer.cartesian(True)
-    pre_minimizer.movemap(move_map)
-    return pre_minimizer
+    return move_map
 
 def create_task_factory(nopack_positions:set=set(), pre_mutation_positions:set=set(), \
         point_mutations:set=set(), design_positions:set=set(), \
@@ -800,20 +806,37 @@ def create_move_map(focus_selection, minimize_neighborhood_only:bool=False, \
             move_map.add_jump_action(move_map_action.mm_enable, JumpIndexSelector(jump_edge))
     return move_map
 
+def create_packer(score_function, task_factory):
+    packer = PackRotamersMover(score_function)
+    packer.task_factory(task_factory)
+    return packer
+
+def create_minimizer(score_function, move_map=None):
+    minimizer = MinMover()
+    minimizer.min_type("lbfgs_armijo_nonmonotone")
+    minimizer.score_function(score_function)
+    if score_function.get_weight(ScoreType.cart_bonded) > 0:
+        minimizer.cartesian(True)
+    if type(move_map) == MoveMap:
+        minimizer.set_movemap(move_map)
+    elif type(move_map) == MoveMapFactory:
+        minimizer.set_movemap_factory(move_map)
+    return minimizer
+
 def create_fast_relax_mover(score_function, task_factory, move_map=None):
     fast_relax = FastRelax()
     fast_relax.set_scorefxn(score_function)
     fast_relax.set_task_factory(task_factory)
+    if score_function.get_weight(ScoreType.cart_bonded) > 0:
+        fast_relax.cartesian(True)
     if type(move_map) == MoveMap:
         fast_relax.set_movemap(move_map)
     elif type(move_map) == MoveMapFactory:
         fast_relax.set_movemap_factory(move_map)
-    if score_function.get_weight(ScoreType.cart_bonded) > 0:
-        fast_relax.cartesian(True)
     return fast_relax
 
 def load_pdb_as_pose(score_function, pdb:str, pre_mutators, fold_tree, chi_dihedrals:list, \
-        symmetry:str, constraint_file:str, geometry_constraints, constraints):
+        symmetry:str, membrane_span_file:str, constraint_file:str, geometry_constraints, constraints):
     # Load pdb as pose.
     pose = pose_from_pdb(pdb)
     for pre_mutator in pre_mutators:
@@ -822,7 +845,7 @@ def load_pdb_as_pose(score_function, pdb:str, pre_mutators, fold_tree, chi_dihed
         pose.fold_tree(fold_tree)
     set_chi_dihedral(pose, chi_dihedrals)
     # Apply symmetry if specified.
-    set_symmetry(symmetry, pose)
+    apply_symmetry_membrane(symmetry, membrane_span_file, pose)
     # Read constraint files from the command line and apply to pose.
     if constraint_file:
         add_fa_constraints_from_cmdline(pose, score_function)
@@ -914,8 +937,8 @@ def calculate_pose_scores(pose, score_function, theozyme_positions:set=set(), \
     return scores
 
 def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, constraint_file:str, \
-        geometry_constraints, constraints, symmetry:str, movers, cloud_pdb_lines:list=None, \
-        n_decoys:int=50, save_n_decoys:int=1, theozyme_positions:set=set(), \
+        geometry_constraints, constraints, symmetry:str, membrane_span_file:str, movers, \
+        cloud_pdb_lines:list=None, n_decoys:int=50, save_n_decoys:int=1, theozyme_positions:set=set(), \
         output_filename_prefix:str=None, wildtype_sequence:str=str()):
     if not output_filename_prefix:
         output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
@@ -1003,8 +1026,9 @@ def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, c
             with open(tmp_pdb, "w") as p_pdb:
                 p_pdb.writelines(cloud_pdb_lines[0])
                 p_pdb.writelines(rotamer_lines)
-            pose_copy = load_pdb_as_pose(score_function, tmp_pdb, pre_mutators, fold_tree, \
-                    chi_dihedrals, symmetry, constraint_file, geometry_constraints, constraints)
+            pose_copy = load_pdb_as_pose(score_function, tmp_pdb, pre_mutators, \
+                    fold_tree, chi_dihedrals, symmetry, membrane_span_file, \
+                    constraint_file, geometry_constraints, constraints)
             os.remove(tmp_pdb)
         else:
             pose_copy = Pose(pose)
@@ -1075,8 +1099,8 @@ def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, c
                 pf.write(json.dumps(scores) + "\n")
 
 def run_job_distributor(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
-        constraint_file:str, geometry_constraints, constraints, symmetry:str, movers, \
-        cloud_pdb_lines:list=None, n_decoys:int=5, output_filename_prefix:str=None, \
+        constraint_file:str, geometry_constraints, constraints, symmetry:str, membrane_span_file:str, \
+        movers, cloud_pdb_lines:list=None, n_decoys:int=5, output_filename_prefix:str=None, \
         wildtype_sequence:str=str()):
     if not output_filename_prefix:
         output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
@@ -1091,8 +1115,9 @@ def run_job_distributor(score_function, pose, pre_mutators, fold_tree, chi_dihed
             with open(tmp_pdb, "w") as p_pdb:
                 p_pdb.writelines(cloud_pdb_lines[0])
                 p_pdb.writelines(rotamer_lines)
-            pose_copy = load_pdb_as_pose(score_function, tmp_pdb, pre_mutators, fold_tree, \
-                    chi_dihedrals, symmetry, constraint_file, geometry_constraints, constraints)
+            pose_copy = load_pdb_as_pose(score_function, tmp_pdb, pre_mutators, \
+                    fold_tree, chi_dihedrals, symmetry, membrane_span_file, \
+                    constraint_file, geometry_constraints, constraints)
             os.remove(tmp_pdb)
         else:
             pose_copy = Pose(pose)
@@ -1162,7 +1187,7 @@ def main(args):
     pre_mutations.update(static_ncaa_mutations)
     # Apply pre-mutations.
     pre_mutators, pre_mutation_pose_indices = create_residue_mutators(pre_mutations, \
-            noncanonical_amino_acids=args.noncanonical_amino_acids, ddG_wildtype=args.args.ddG_wildtype)
+            noncanonical_amino_acids=args.noncanonical_amino_acids, ddG_wildtype=args.ddG_wildtype)
     for pre_mutator in pre_mutators:
         pre_mutator.apply(pose)
     # Set fold tree.
@@ -1224,23 +1249,23 @@ def main(args):
         rigid_body_tform_jump_edges = pose_indices_to_jump_edges(fold_tree, \
                 rigid_body_tform_pose_indices)
     # Apply symmetry if specified.
-    n_monomers = set_symmetry(args.symmetry, pose, coord_ref_pose, ddG_ref_pose, \
-            sequence_length=sequence_length)
+    n_monomers = apply_symmetry_membrane(args.symmetry, args.membrane_span_file, \
+            pose, coord_ref_pose, ddG_ref_pose, sequence_length=sequence_length)
     # Read constraint files from the command line and apply to pose.
     if args.constraint_file:
         add_fa_constraints_from_cmdline(pose, score_function)
     # Add geometry constraints on-the-fly.
     geometry_constraints = list()
     if args.distance_constraint_atoms:
-        geometry_constraints.extend(create_constraints(pose, args.distance_constraint_atoms, \
-                args.distance_constraint_parameters, \
+        geometry_constraints.extend(create_constraints(pose, \
+                args.distance_constraint_atoms, args.distance_constraint_parameters, \
                 bounded_distances=args.bounded_distances))
     if args.angle_constraint_atoms:
-        geometry_constraints.extend(create_constraints(pose, args.angle_constraint_atoms, \
-                args.angle_constraint_parameters))
+        geometry_constraints.extend(create_constraints(pose, \
+                args.angle_constraint_atoms, args.angle_constraint_parameters))
     if args.dihedral_constraint_atoms:
-        geometry_constraints.extend(create_constraints(pose, args.dihedral_constraint_atoms, \
-                args.dihedral_constraint_parameters))
+        geometry_constraints.extend(create_constraints(pose, \
+                args.dihedral_constraint_atoms, args.dihedral_constraint_parameters))
     for geometry_constraint in geometry_constraints:
         pose.add_constraint(geometry_constraint)
     # Create the task factory.
@@ -1315,8 +1340,9 @@ def main(args):
     # Perform pre-minimization.
     assembly_length = len(pose.sequence())
     if args.pre_minimization and len(pre_minimization_pose_indices) > 0:
-        pre_minimizer = create_pre_minimizer(score_function, assembly_length, \
+        pre_minimization_move_map = create_pre_minimization_move_map(assembly_length, \
                 pre_minimization_pose_indices, jump_edges=rigid_body_tform_jump_edges)
+        pre_minimizer = create_minimizer(score_function, move_map=pre_minimization_move_map)
         movers.append(pre_minimizer)
     # Create the move map.
     if not args.minimize_neighborhood_only:
@@ -1346,7 +1372,7 @@ def main(args):
     elif args.save_n_decoys:
         run_job(score_function, pose, pre_mutators, fold_tree, args.chi_dihedrals, \
                 args.constraint_file, geometry_constraints, constraints, \
-                args.symmetry, movers, cloud_pdb_lines=cloud_pdb_lines, \
+                args.symmetry, args.membrane_span_file, movers, cloud_pdb_lines=cloud_pdb_lines, \
                 n_decoys=args.n_decoys, save_n_decoys=args.save_n_decoys, \
                 theozyme_positions=pre_minimization_pose_indices, \
                 output_filename_prefix=args.output_filename_prefix, \
@@ -1354,7 +1380,7 @@ def main(args):
     else:
         run_job_distributor(score_function, pose, pre_mutators, fold_tree, args.chi_dihedrals, \
                 args.constraint_file, geometry_constraints, constraints, \
-                args.symmetry, movers, cloud_pdb_lines=cloud_pdb_lines, \
+                args.symmetry, args.membrane_span_file, movers, cloud_pdb_lines=cloud_pdb_lines, \
                 n_decoys=args.n_decoys, output_filename_prefix=args.output_filename_prefix, \
                 wildtype_sequence=wildtype_sequence)
 
