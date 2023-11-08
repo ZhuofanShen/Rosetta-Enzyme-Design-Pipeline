@@ -235,7 +235,7 @@ def residue_name3_selector(pose, name3_list, sequence_length:int=None):
             name3_chain_id_dict[name3] = set()
     pdb_info = pose.pdb_info()
     for pose_index in list(range(1, len(pose.sequence()) + 1))[:sequence_length]:
-        name3 = pose.residue(pose_index).name3()
+        name3 = pose.residue(pose_index).name3().strip(" ")
         chain_id_set = name3_chain_id_dict.get(name3)
         if chain_id_set is not None:
             chain_id = pdb_info.pose2pdb(pose_index).split(" ")[1]
