@@ -50,15 +50,19 @@ def parse_arguments():
     parser.add_argument("-ddG_ref", "--ddG_reference_pdb", type=str)
     parser.add_argument("-params", "--parameters_files", type=str, nargs="*")
     parser.add_argument("-optH", "--optimize_protonation_state", action="store_true")
+    parser.add_argument("-sf", "--score_function", type=str, default="ref2015_cst", \
+            help="$base_$soft_$cart_$cst")
+    parser.add_argument("--score_terms", type=str, nargs="*", default=list())
     parser.add_argument("-ft", "--fold_tree", type=str, nargs="*")
+    parser.add_argument("-ddg_wt", "--ddG_wildtype", action="store_true", \
+            help="Keep all -premuts, -muts, -des, -des_bs and -des_enzdes positions as wildtype.")
+    parser.add_argument("-premuts", "--pre_mutations", type=str, nargs="*", default=list(), 
+            help="Site-directed AA substitution. Applied before everything.")
     parser.add_argument("-edges", "--alter_jump_edges", type=str, nargs="*", help=\
             "[$edge,$atom1,$atom2] or [$edge,$upstream_edge] or [$edge,$upstream_edge,$atom1,$atom2] * n")
     parser.add_argument("-chis", "--chi_dihedrals", type=str, nargs="*", default=list(), \
             help="$chain$residue_index,$chi,$degree or $residue_name3,$chi,$degree")
     parser.add_argument("-symm", "--symmetry", type=str)
-    parser.add_argument("-sf", "--score_function", type=str, default="ref2015_cst", \
-            help="$base_$soft_$cart_$cst")
-    parser.add_argument("--score_terms", type=str, nargs="*", default=list())
     parser.add_argument("-coord_cst_sd", "--coordinate_constraints_standard_deviation", type=float, \
             default=0.5)
     parser.add_argument("-bounded_coord_cst", "--bounded_coordinate_constraints", type=float)
@@ -92,8 +96,6 @@ def parse_arguments():
     parser.add_argument("-subs", "--substrates", type=str, nargs="*")
     parser.add_argument("-sub_ids", "--substrate_identities", type=str, nargs="*", help="name3")
     parser.add_argument("-premin", "--pre_minimization", action="store_true")
-    parser.add_argument("-ddg_wt", "--ddG_wildtype", action="store_true", \
-            help="Keep all -muts, -des, -des_bs and -des_enzdes positions as wildtype.")
     parser.add_argument("-muts", "--mutations", type=str, nargs="*", default=list(), 
             help="Site-directed AA substitution. Highests priority.")
     parser.add_argument("-des", "--design_residues", type=str, nargs="*", default=list(), \
@@ -235,6 +237,33 @@ def residue_name3_selector(pose, name3_list, sequence_length:int=None):
             if len(chain_id_set) == 0 or chain_id in chain_id_set:
                 pose_indices.add(str(pose_index))
     return pose_indices
+
+def create_residue_mutators(mutations, noncanonical_amino_acids:list=list(), \
+        ddG_wildtype:bool=False):
+    # Compatible amino acid alphabet.
+    AA_1to3_dict = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", \
+            "G": "GLY", "H": "HIS", "I": "ILE", "K": "LYS", "L": "LEU", \
+            "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG", \
+            "S": "SER", "T": "THR", "V": "VAL", "W": "TRP", "Y": "TYR"}
+    # Include noncanonical amino acids.
+    for ncaa in noncanonical_amino_acids:
+        ncaa_name1, ncaa_name3 = ncaa.split(",")
+        AA_1to3_dict[ncaa_name1] = ncaa_name3
+    # Create residue mutators.
+    mutators = list()
+    mutation_pose_indices = set()
+    for mutation in mutations:
+        mutation_pose_indices.add(mutating_position)
+        if not ddG_wildtype:
+            mutating_position, target_AA = mutation.split(",")
+            mutator = MutateResidue()
+            mutator.set_selector(ResidueIndexSelector(mutating_position))
+            target_AA_name3 = AA_1to3_dict.get(target_AA)
+            if target_AA_name3 is None:
+                raise Exception("Specified AA type " + target_AA + " is not declared.")
+            mutator.set_res_name(target_AA_name3)
+            mutators.append(mutator)
+    return mutators, mutation_pose_indices
 
 def create_fold_tree(edges):
     fold_tree = FoldTree()
@@ -565,8 +594,9 @@ def create_pre_minimizer(score_function, assembly_length, pre_minimization_pose_
     pre_minimizer.movemap(move_map)
     return pre_minimizer
 
-def create_task_factory(nopack_positions:set=set(), point_mutations:set=set(), \
-        design_positions:set=set(), theozyme_positions:set=set(), enzdes_positions:set=set(), \
+def create_task_factory(nopack_positions:set=set(), pre_mutation_positions:set=set(), \
+        point_mutations:set=set(), design_positions:set=set(), \
+        theozyme_positions:set=set(), enzdes_positions:set=set(), \
         design_binding_site:bool=False, design_enzdes_shell:bool=False, \
         repack_neighborhood_only:bool=False, repack_binding_site:bool=True, \
         repack_enzdes_shell:bool=True, ddG_ref_pose=None, ddG_wildtype:bool=False, \
@@ -586,55 +616,33 @@ def create_task_factory(nopack_positions:set=set(), point_mutations:set=set(), \
     task_factory.push_back(ExtraRotamers(0, 2, 1))
 
     # Compatible amino acid types.
-    AA_1to3_dict = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", \
-            "G": "GLY", "H": "HIS", "I": "ILE", "K": "LYS", "L": "LEU", \
-            "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG", \
-            "S": "SER", "T": "THR", "V": "VAL", "W": "TRP", "Y": "TYR"}
-    all_AAs = set(AA_1to3_dict.keys())
+    all_AAs = set("ACDEFGHIKLMNPQRSTVWY")
     # Include noncanonical amino acids.
-    ncaa_palette = CustomBaseTypePackerPalette()
-    for ncaa in noncanonical_amino_acids:
-        ncaa_name1, ncaa_name3 = ncaa.split(",")
-        AA_1to3_dict[ncaa_name1] = ncaa_name3
-        ncaa_palette.add_type(ncaa_name3)
     if allow_ncaa_in_design:
-        all_AAs = set(AA_1to3_dict.keys())
+        ncaa_palette = CustomBaseTypePackerPalette()
+        for ncaa in noncanonical_amino_acids:
+            ncaa_name1, ncaa_name3 = ncaa.split(",")
+            ncaa_palette.add_type(ncaa_name3)
+            all_AAs.add(ncaa_name1)
         task_factory.set_packer_palette(ncaa_palette)
 
     # Site-directed AA substitutions positions.
     # Repack its surrounding shell w/o including the focus region itself.
-    site_directed_substitution_positions = set()
+    site_directed_substitution_positions = pre_mutation_positions.copy()
 
     # Repack its surrounding shell along with the focus region itself if not static.
-    repack_shell_focus_positions = set()
+    repack_shell_focus_positions = pre_mutation_positions.copy()
 
     # Specify the point mutations.
-    mutators = list()
     mutation_positions = set()
-    site_directed_ncaa_positions = set()
-    canonical_AAs = set("ACDEFGHIKLMNPQRSTVWY")
     for point_mutation in point_mutations:
         mutating_position, target_AA = point_mutation.split(",")
-        if target_AA not in AA_1to3_dict.keys():
-            raise Exception("Specified AA type " + target_AA + " is not declared in -ncaa.")
-        point_mutation_selection = ResidueIndexSelector(mutating_position)
-        if mutating_position in nopack_positions or not target_AA in canonical_AAs:
-            if not ddG_wildtype:
-                mutator = MutateResidue()
-                mutator.set_selector(point_mutation_selection)
-                target_AA_name3 = AA_1to3_dict[target_AA]
-                mutator.set_res_name(target_AA_name3)
-                mutators.append(mutator)
-            repack_shell_focus_positions.add(mutating_position)
-            if not mutating_position in nopack_positions:
-            # Repack the introduced noncanonical AA.
-                site_directed_ncaa_positions.add(mutating_position)
-        elif not ddG_wildtype:
+        mutation_positions.add(mutating_position)
+        if not ddG_wildtype:
             restriction = RestrictAbsentCanonicalAASRLT()
             restriction.aas_to_keep(target_AA)
             task_factory.push_back(OperateOnResidueSubset(restriction, \
-                    point_mutation_selection))
-        mutation_positions.add(mutating_position)
+                    ResidueIndexSelector(mutating_position)))
     site_directed_substitution_positions.update(mutation_positions)
 
     # Select the design positions.
@@ -647,7 +655,7 @@ def create_task_factory(nopack_positions:set=set(), point_mutations:set=set(), \
     design_selection.add_residue_selector(site_directed_design_selection)
     site_directed_substitution_positions.update(design_positions)
 
-    # Site-directed AA substitutions positions. May include nopack positions or NCAA mutations.
+    # Site-directed AA substitutions positions. May include nopack positions or pre-mutation positions.
     substitution_selection = ResidueIndexSelector(",".join(site_directed_substitution_positions) + ",")
 
     # Design its surrounding shell and repack the focus region itself.
@@ -697,10 +705,10 @@ def create_task_factory(nopack_positions:set=set(), point_mutations:set=set(), \
 
     # Exclude nopack positions from repacking.
     nopack_selection = ResidueIndexSelector(",".join(nopack_positions) + ",")
-    # Need to exclude NCAA substitutions from the substitution selection when repacking.
-    # In other words, explicitly include NCAA substitutions in repacking.
-    caa_substitution_selection = AndResidueSelector(substitution_selection, NotResidueSelector(\
-            ResidueIndexSelector(",".join(site_directed_ncaa_positions) + ",")))
+    # Need to exclude pre-mutation positions from substitution via packer positions.
+    # In other words, explicitly include pre-mutation positions in repacking.
+    substitution_via_packer_selection = AndResidueSelector(substitution_selection, \
+            NotResidueSelector(ResidueIndexSelector(",".join(pre_mutation_positions) + ",")))
     if repack_neighborhood_only:
         # Repack the neighborhood region of the AA substitutions and theozyme positions.
         # min_shell_focus_selection may contain nopack positions or redundant ddG_ref_pose positions.
@@ -722,9 +730,9 @@ def create_task_factory(nopack_positions:set=set(), point_mutations:set=set(), \
             pack_selection = AndResidueSelector(min_shell_focus_selection, \
                     NotResidueSelector(nopack_selection))
         if not ddG_wildtype:
-            # Exclude the canonical AA substitutions and nopack positions from repacking.
+            # Exclude substitution via packer positions and nopack positions from repacking.
             repacking_selection = AndResidueSelector(pack_selection, NotResidueSelector(\
-                    caa_substitution_selection))
+                    substitution_via_packer_selection))
         else:
             repacking_selection = pack_selection
         task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), repacking_selection))
@@ -732,8 +740,8 @@ def create_task_factory(nopack_positions:set=set(), point_mutations:set=set(), \
         task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), pack_selection, True))
     else:
         if not ddG_wildtype:
-            # Exclude the canonical AA substitutions and nopack positions from repacking.
-            not_repacking_selection = OrResidueSelector(caa_substitution_selection, nopack_selection)
+            # Exclude substitution via packer positions and nopack positions from repacking.
+            not_repacking_selection = OrResidueSelector(substitution_via_packer_selection, nopack_selection)
         else:
             not_repacking_selection = nopack_selection
         task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), \
@@ -741,7 +749,7 @@ def create_task_factory(nopack_positions:set=set(), point_mutations:set=set(), \
         task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), nopack_selection))
         min_shell_focus_selection = None
 
-    return task_factory, mutators, min_shell_focus_selection
+    return task_factory, min_shell_focus_selection
 
 def create_move_map(focus_selection, minimize_neighborhood_only:bool=False, \
         static_positions:set=set(), ddG_ref_pose=None, n_monomers=1, \
@@ -804,10 +812,12 @@ def create_fast_relax_mover(score_function, task_factory, move_map=None):
         fast_relax.cartesian(True)
     return fast_relax
 
-def load_pdb_as_pose(score_function, pdb:str, fold_tree, chi_dihedrals:list, \
+def load_pdb_as_pose(score_function, pdb:str, pre_mutators, fold_tree, chi_dihedrals:list, \
         symmetry:str, constraint_file:str, geometry_constraints, constraints):
     # Load pdb as pose.
     pose = pose_from_pdb(pdb)
+    for pre_mutator in pre_mutators:
+        pre_mutator.apply(pose)
     if fold_tree:
         pose.fold_tree(fold_tree)
     set_chi_dihedral(pose, chi_dihedrals)
@@ -903,7 +913,7 @@ def calculate_pose_scores(pose, score_function, theozyme_positions:set=set(), \
         scores["substrates"] = energy_metric(score_function, pose, selection=substrate_selection)
     return scores
 
-def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file:str, \
+def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, constraint_file:str, \
         geometry_constraints, constraints, symmetry:str, movers, cloud_pdb_lines:list=None, \
         n_decoys:int=50, save_n_decoys:int=1, theozyme_positions:set=set(), \
         output_filename_prefix:str=None, wildtype_sequence:str=str()):
@@ -993,8 +1003,8 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
             with open(tmp_pdb, "w") as p_pdb:
                 p_pdb.writelines(cloud_pdb_lines[0])
                 p_pdb.writelines(rotamer_lines)
-            pose_copy = load_pdb_as_pose(score_function, tmp_pdb, fold_tree, chi_dihedrals, \
-                    symmetry, constraint_file, geometry_constraints, constraints)
+            pose_copy = load_pdb_as_pose(score_function, tmp_pdb, pre_mutators, fold_tree, \
+                    chi_dihedrals, symmetry, constraint_file, geometry_constraints, constraints)
             os.remove(tmp_pdb)
         else:
             pose_copy = Pose(pose)
@@ -1064,7 +1074,7 @@ def run_job(score_function, pose, fold_tree, chi_dihedrals:list, constraint_file
                 scores["decoy"] = filename
                 pf.write(json.dumps(scores) + "\n")
 
-def run_job_distributor(score_function, pose, fold_tree, chi_dihedrals:list, \
+def run_job_distributor(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
         constraint_file:str, geometry_constraints, constraints, symmetry:str, movers, \
         cloud_pdb_lines:list=None, n_decoys:int=5, output_filename_prefix:str=None, \
         wildtype_sequence:str=str()):
@@ -1081,8 +1091,8 @@ def run_job_distributor(score_function, pose, fold_tree, chi_dihedrals:list, \
             with open(tmp_pdb, "w") as p_pdb:
                 p_pdb.writelines(cloud_pdb_lines[0])
                 p_pdb.writelines(rotamer_lines)
-            pose_copy = load_pdb_as_pose(score_function, tmp_pdb, fold_tree, chi_dihedrals, \
-                    symmetry, constraint_file, geometry_constraints, constraints)
+            pose_copy = load_pdb_as_pose(score_function, tmp_pdb, pre_mutators, fold_tree, \
+                    chi_dihedrals, symmetry, constraint_file, geometry_constraints, constraints)
             os.remove(tmp_pdb)
         else:
             pose_copy = Pose(pose)
@@ -1104,18 +1114,7 @@ def main(args):
     score_function = set_score_function(args.score_function, symmetry=args.symmetry, \
             score_terms=args.score_terms)
     # Load pdb files as poses.
-    pose = pose_from_pdb(args.pdb)
-    coord_ref_pose = None
-    if args.coordinate_reference_pdb:
-        coord_ref_pose = pose_from_pdb(args.coordinate_reference_pdb)
-    ddG_ref_pose = None
-    if args.ddG_reference_pdb:
-        if args.ddG_reference_pdb == "True":
-            ddG_ref_pose = pose
-        else:
-            ddG_ref_pose = pose_from_pdb(args.ddG_reference_pdb)
-    # Parse cloud pdb.
-    if args.cloud_pdb:
+    if args.cloud_pdb: # Parse cloud pdb.
         cloud_pdb_lines = parse_cloud_pdb(args.pdb)
         args.n_decoys = min(args.n_decoys, len(cloud_pdb_lines[1:]))
         with open(args.pdb[:-4] + ".tmp.pdb", "w") as pf:
@@ -1125,17 +1124,13 @@ def main(args):
         os.remove(args.pdb[:-4] + ".tmp.pdb")
     else:
         cloud_pdb_lines = None
-    # Set fold tree.
-    if not args.fold_tree and not args.alter_jump_edges:
-        fold_tree = pose.fold_tree()
-    else:
-        if args.fold_tree:
-            fold_tree = create_fold_tree(args.fold_tree)
-        elif args.alter_jump_edges:
-            fold_tree = alter_fold_tree_jump_edges(pose.fold_tree(), args.alter_jump_edges)
-        pose.fold_tree(fold_tree)
-    # Set chi dihedrals.
-    set_chi_dihedral(pose, args.chi_dihedrals)
+        pose = pose_from_pdb(args.pdb)
+    coord_ref_pose = None
+    if args.coordinate_reference_pdb:
+        coord_ref_pose = pose_from_pdb(args.coordinate_reference_pdb)
+    ddG_ref_pose = None
+    if args.ddG_reference_pdb:
+        ddG_ref_pose = pose_from_pdb(args.ddG_reference_pdb)
     # Get sequences information.
     wildtype_sequence = pose.sequence()
     sequence_length = len(wildtype_sequence)
@@ -1153,8 +1148,34 @@ def main(args):
     if args.static_residue_identities:
         static_pose_indices.update(residue_name3_selector(pose, args.static_residue_identities, \
                 sequence_length=sequence_length))
-    mutation_pose_indices, _ = pdb_to_pose_numbering(pose, args.mutations)
+    pre_mutations, _ = pdb_to_pose_numbering(pose, args.pre_mutations)
+    mutations, _ = pdb_to_pose_numbering(pose, args.mutations)
     design_pose_indices, _ = pdb_to_pose_numbering(pose, args.design_residues)
+    # Classify NCAA mutations and static mutations into pre-mutations.
+    static_ncaa_mutations = set()
+    canonical_AAs = set("ACDEFGHIKLMNPQRSTVWY")
+    for mutation in mutations:
+        mutating_position, target_AA = mutation.split(",")
+        if mutating_position in static_pose_indices or not target_AA in canonical_AAs:
+            static_ncaa_mutations.add(mutation)
+    mutations = mutations - static_ncaa_mutations
+    pre_mutations.update(static_ncaa_mutations)
+    # Apply pre-mutations.
+    pre_mutators, pre_mutation_pose_indices = create_residue_mutators(pre_mutations, \
+            noncanonical_amino_acids=args.noncanonical_amino_acids, ddG_wildtype=args.args.ddG_wildtype)
+    for pre_mutator in pre_mutators:
+        pre_mutator.apply(pose)
+    # Set fold tree.
+    if not args.fold_tree and not args.alter_jump_edges:
+        fold_tree = pose.fold_tree()
+    else:
+        if args.fold_tree:
+            fold_tree = create_fold_tree(args.fold_tree)
+        elif args.alter_jump_edges:
+            fold_tree = alter_fold_tree_jump_edges(pose.fold_tree(), args.alter_jump_edges)
+        pose.fold_tree(fold_tree)
+    # Set chi dihedrals.
+    set_chi_dihedral(pose, args.chi_dihedrals)
     # Select residue by name3 reference pose.
     if args.ddG_reference_pdb:
         res_name3_ref_pose = ddG_ref_pose
@@ -1223,9 +1244,10 @@ def main(args):
     for geometry_constraint in geometry_constraints:
         pose.add_constraint(geometry_constraint)
     # Create the task factory.
-    task_factory, mutators, min_shell_focus_selection = create_task_factory(\
+    task_factory, min_shell_focus_selection = create_task_factory(\
             nopack_positions=static_pose_indices, \
-            point_mutations=mutation_pose_indices, \
+            pre_mutation_positions=pre_mutation_pose_indices, \
+            point_mutations=mutations, \
             design_positions=design_pose_indices, \
             theozyme_positions=theozyme_pose_indices, \
             enzdes_positions=enzdes_pose_indices, \
@@ -1290,8 +1312,6 @@ def main(args):
     no_rmsd_residues, _ = pdb_to_pose_numbering(pose, args.no_rmsd_residues)
     rmsd_metric = RMSDMetric(pose, NotResidueSelector(ResidueIndexSelector(\
             ",".join(no_rmsd_residues) + ",")))
-    # Make some point mutations if not args.ddG_wildtype.
-    movers.extend(mutators)
     # Perform pre-minimization.
     assembly_length = len(pose.sequence())
     if args.pre_minimization and len(pre_minimization_pose_indices) > 0:
@@ -1324,7 +1344,7 @@ def main(args):
         move_map.show()
         print(score_function.show(pose))
     elif args.save_n_decoys:
-        run_job(score_function, pose, fold_tree, args.chi_dihedrals, \
+        run_job(score_function, pose, pre_mutators, fold_tree, args.chi_dihedrals, \
                 args.constraint_file, geometry_constraints, constraints, \
                 args.symmetry, movers, cloud_pdb_lines=cloud_pdb_lines, \
                 n_decoys=args.n_decoys, save_n_decoys=args.save_n_decoys, \
@@ -1332,7 +1352,7 @@ def main(args):
                 output_filename_prefix=args.output_filename_prefix, \
                 wildtype_sequence=wildtype_sequence)
     else:
-        run_job_distributor(score_function, pose, fold_tree, args.chi_dihedrals, \
+        run_job_distributor(score_function, pose, pre_mutators, fold_tree, args.chi_dihedrals, \
                 args.constraint_file, geometry_constraints, constraints, \
                 args.symmetry, movers, cloud_pdb_lines=cloud_pdb_lines, \
                 n_decoys=args.n_decoys, output_filename_prefix=args.output_filename_prefix, \
