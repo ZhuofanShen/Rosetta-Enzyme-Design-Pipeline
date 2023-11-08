@@ -1205,10 +1205,10 @@ def main(args):
     # Select residue by name3 reference pose.
     if args.ddG_reference_pdb:
         res_name3_ref_pose = ddG_ref_pose
-        enzdes_ref_pdb = args.pdb
+        enzdes_ref_pdb = args.ddG_reference_pdb
     else:
         res_name3_ref_pose = pose
-        enzdes_ref_pdb = args.ddG_reference_pdb
+        enzdes_ref_pdb = args.pdb
     rigid_body_tform_pose_indices = set()
     # Get substrates and catalytic residues pose indices.
     # Theozyme_pose_indices will include ddG_ref_pose redundant positions.
