@@ -837,7 +837,8 @@ def create_fast_relax_mover(score_function, task_factory, move_map=None):
     return fast_relax
 
 def load_pdb_as_pose(score_function, pdb:str, pre_mutators, fold_tree, chi_dihedrals:list, \
-        symmetry:str, membrane_span_file:str, constraint_file:str, geometry_constraints, constraints):
+        symmetry:str, membrane_span_file:str, constraint_file:str, geometry_constraints, \
+        constraints, favor_native_residue):
     # Load pdb as pose.
     pose = pose_from_pdb(pdb)
     for pre_mutator in pre_mutators:
@@ -853,9 +854,12 @@ def load_pdb_as_pose(score_function, pdb:str, pre_mutators, fold_tree, chi_dihed
     # Apply geometry constraints.
     for geometry_constraint in geometry_constraints:
         pose.add_constraint(geometry_constraint)
-    # Apply coordinate constraints, EnzDes constraints and AA type constraints.
+    # Apply coordinate constraints and EnzDes constraints.
     for constraint in constraints:
         constraint.apply(pose)
+    # Apply AA type constraints.
+    if favor_native_residue:
+        FavorNativeResidue(pose, favor_native_residue)
     return pose
 
 def parse_cloud_pdb(cloud_pdb):
@@ -939,9 +943,10 @@ def calculate_pose_scores(pose, score_function, theozyme_positions:set=set(), \
         scores["substrates"] = energy_metric(score_function, pose, selection=substrate_selection)
     return scores
 
-def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, constraint_file:str, \
-        geometry_constraints, constraints, symmetry:str, membrane_span_file:str, movers, \
-        cloud_pdb_lines:list=None, n_decoys:int=50, save_n_decoys:int=1, theozyme_positions:set=set(), \
+def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
+        symmetry:str, membrane_span_file:str, constraint_file:str, geometry_constraints, \
+        constraints, favor_native_residue, movers, cloud_pdb_lines:list=None, \
+        n_decoys:int=50, save_n_decoys:int=1, theozyme_positions:set=set(), \
         output_filename_prefix:str=None, wildtype_sequence:str=str()):
     if not output_filename_prefix:
         output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
@@ -1031,7 +1036,7 @@ def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, c
                 p_pdb.writelines(rotamer_lines)
             pose_copy = load_pdb_as_pose(score_function, tmp_pdb, pre_mutators, \
                     fold_tree, chi_dihedrals, symmetry, membrane_span_file, \
-                    constraint_file, geometry_constraints, constraints)
+                    constraint_file, geometry_constraints, constraints, favor_native_residue)
             os.remove(tmp_pdb)
         else:
             pose_copy = Pose(pose)
@@ -1102,9 +1107,9 @@ def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, c
                 pf.write(json.dumps(scores) + "\n")
 
 def run_job_distributor(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
-        constraint_file:str, geometry_constraints, constraints, symmetry:str, membrane_span_file:str, \
-        movers, cloud_pdb_lines:list=None, n_decoys:int=5, output_filename_prefix:str=None, \
-        wildtype_sequence:str=str()):
+        symmetry:str, membrane_span_file:str, constraint_file:str, geometry_constraints, \
+        constraints, favor_native_residue, movers, cloud_pdb_lines:list=None, \
+        n_decoys:int=5, output_filename_prefix:str=None, wildtype_sequence:str=str()):
     if not output_filename_prefix:
         output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
     job_distributor = PyJobDistributor(output_filename_prefix, n_decoys, score_function)
@@ -1120,7 +1125,7 @@ def run_job_distributor(score_function, pose, pre_mutators, fold_tree, chi_dihed
                 p_pdb.writelines(rotamer_lines)
             pose_copy = load_pdb_as_pose(score_function, tmp_pdb, pre_mutators, \
                     fold_tree, chi_dihedrals, symmetry, membrane_span_file, \
-                    constraint_file, geometry_constraints, constraints)
+                    constraint_file, geometry_constraints, constraints, favor_native_residue)
             os.remove(tmp_pdb)
         else:
             pose_copy = Pose(pose)
@@ -1290,7 +1295,7 @@ def main(args):
             excluded_amino_acid_types=args.excluded_amino_acid_types, \
             noncanonical_amino_acids=args.noncanonical_amino_acids, \
             allow_ncaa_in_design=args.allow_ncaa_in_design)
-    # List of coordinate constraints, EnzDes constraints and AA type constraints.
+    # List of coordinate constraints and EnzDes constraints.
     constraints = list()
     # Add coordinate constraints.
     no_coord_cst_selection = OrResidueSelector()
@@ -1330,11 +1335,9 @@ def main(args):
         enzdes_cst = create_enzdes_constraints()
         enzdes_cst.apply(pose)
         constraints.append(enzdes_cst)
-    # Favor native AA types.
+    # Add AA type constraints.
     if args.favor_native_residue and (args.design_residues or args.design_binding_site):
-        favor_nataa = FavorNativeResidue(pose, args.favor_native_residue)
-        favor_nataa.apply(pose)
-        constraints.append(favor_nataa)
+        FavorNativeResidue(pose, args.favor_native_residue)
     # List of movers.
     movers = list()
     # Create the RMSD metric.
@@ -1374,17 +1377,17 @@ def main(args):
         move_map.show()
         print(score_function.show(pose))
     elif args.save_n_decoys:
-        run_job(score_function, pose, pre_mutators, fold_tree, args.chi_dihedrals, \
-                args.constraint_file, geometry_constraints, constraints, \
-                args.symmetry, args.membrane_span_file, movers, cloud_pdb_lines=cloud_pdb_lines, \
+        run_job(score_function, pose, pre_mutators, fold_tree, args.chi_dihedrals, args.symmetry, \
+                args.membrane_span_file, args.constraint_file, geometry_constraints, \
+                constraints, args.favor_native_residue, movers, cloud_pdb_lines=cloud_pdb_lines, \
                 n_decoys=args.n_decoys, save_n_decoys=args.save_n_decoys, \
                 theozyme_positions=pre_minimization_pose_indices, \
                 output_filename_prefix=args.output_filename_prefix, \
                 wildtype_sequence=wildtype_sequence)
     else:
         run_job_distributor(score_function, pose, pre_mutators, fold_tree, args.chi_dihedrals, \
-                args.constraint_file, geometry_constraints, constraints, \
-                args.symmetry, args.membrane_span_file, movers, cloud_pdb_lines=cloud_pdb_lines, \
+                args.symmetry, args.membrane_span_file, args.constraint_file, geometry_constraints, \
+                constraints, args.favor_native_residue, movers, cloud_pdb_lines=cloud_pdb_lines, \
                 n_decoys=args.n_decoys, output_filename_prefix=args.output_filename_prefix, \
                 wildtype_sequence=wildtype_sequence)
 
