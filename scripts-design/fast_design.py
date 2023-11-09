@@ -496,18 +496,19 @@ def get_enzdes_pose_indices(pdb_info, pdb, symmetry):
     with open(pdb, "r") as pdb:
         for line in pdb:
             if line.startswith("REMARK 666 MATCH TEMPLATE"):
+                line_split = list(filter(lambda x: x, line.split(" ")))
                 # substrate
-                substrate_chain_id = line[26]
+                substrate_chain_id = line_split[4]
                 if not main_chain:
                     main_chain = substrate_chain_id
                 if main_chain == substrate_chain_id or not symmetry:
-                    substrate_res_id = int(line[32:36])
+                    substrate_res_id = int(line_split[6])
                     substrate_pose_id = pdb_info.pdb2pose(substrate_chain_id, substrate_res_id)
                     enzdes_substrate_pose_indices.add(str(substrate_pose_id))
                 # enzdes residues
-                motif_chain_id = line[49]
+                motif_chain_id = line_split[9]
                 if main_chain == motif_chain_id or not symmetry:
-                    motif_res_id = int(line[55:59])
+                    motif_res_id = int(line_split[11])
                     motif_pose_id = pdb_info.pdb2pose(motif_chain_id, motif_res_id)
                     enzdes_res_pose_indices.add(str(motif_pose_id))
                 flag = True
@@ -866,17 +867,19 @@ def parse_cloud_pdb(cloud_pdb):
         for line in pf:
             if line.startswith("REMARK 666 MATCH TEMPLATE"):
                 if not substrate_name3:
-                    chain_id = line[26]
-                    substrate_name3 = line[28:31]
-                    pdb_index = line[32:36]
+                    line_split = list(filter(lambda x: x, line.split(" ")))
+                    chain_id = line_split[4]
+                    substrate_name3 = line_split[5]
+                    pdb_index = line_split[6]
                 pdb_lines.append(line)
                 read_rotamer = False
             elif line.startswith("ATOM  ") or line.startswith("HETATM"):
+                res_name3 = line[17:20].strip(" ")
                 if read_rotamer:
-                    if line[17:20] == substrate_name3:
+                    if res_name3 == substrate_name3:
                         rotamer_lines.append(line[:21] + chain_id + pdb_index + line[26:])
                 else:
-                    if line[17:20] == substrate_name3 and line[21] == chain_id and \
+                    if res_name3 == substrate_name3 and line[21] == chain_id and \
                             line[22:26] == pdb_index:
                         pass
                     else:
