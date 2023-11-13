@@ -61,7 +61,7 @@ def parse_arguments():
     parser.add_argument("--score_terms", type=str, nargs="*", default=list())
     parser.add_argument("-ft", "--fold_tree", type=str, nargs="*")
     parser.add_argument("-ddg_wt", "--ddG_wildtype", action="store_true", \
-            help="Keep all -premuts, -muts, -des, -des_bs and -des_enzdes positions as wildtype.")
+            help="Only repack instead of -premuts, -muts, -des, -des_bs and -des_enzdes.")
     parser.add_argument("-premuts", "--pre_mutations", type=str, nargs="*", default=list(), 
             help="Site-directed AA substitution. Applied before everything.")
     parser.add_argument("-edges", "--alter_jump_edges", type=str, nargs="*", help=\
@@ -553,23 +553,14 @@ def index_boolean_filter(index, boolean):
         return str(index)
     return False
 
-def boolean_vector_to_indices_set(boolean_vector, n_monomers:int=1, \
-        truncate_sequence_end:int=0, output_vector:bool=False):
+def boolean_vector_to_indices_set(boolean_vector, n_monomers:int=1):
     boolean_vector = np.array(boolean_vector)
     sequence_length = len(boolean_vector) // n_monomers
     boolean_matrix = boolean_vector[:n_monomers*sequence_length]\
             .reshape(n_monomers, sequence_length).transpose()
-    if truncate_sequence_end > 0:
-        boolean_matrix = boolean_matrix[:-truncate_sequence_end,:]
     indices = set(filter(lambda x: x, map(index_boolean_filter, \
             range(1, len(boolean_matrix) + 1), boolean_matrix)))
-    if output_vector:
-        boolean_vector = vector1_bool(len(boolean_matrix))
-        for index in indices:
-            boolean_vector[int(index)] = True
-        return boolean_vector
-    else:
-        return indices
+    return indices
 
 def select_neighborhood_region(focus_selection, include_focus: bool, method:str="vector"):
     if method == "vector":
@@ -601,13 +592,12 @@ def create_pre_minimization_move_map(assembly_length, pre_minimization_pose_indi
         move_map.set_jump(jump_edge, True)
     return move_map
 
-def create_task_factory(nopack_positions:set=set(), pre_mutation_positions:set=set(), \
-        point_mutations:set=set(), design_positions:set=set(), \
-        theozyme_positions:set=set(), enzdes_positions:set=set(), \
-        design_binding_site:bool=False, design_enzdes_shell:bool=False, \
+def create_task_factory(specified_static_positions:set=set(), pre_mutation_positions:set=set(), \
+        point_mutations:set=set(), design_positions:set=set(), theozyme_positions:set=set(), \
+        enzdes_positions:set=set(), design_binding_site:bool=False, design_enzdes_shell:bool=False, \
         repack_neighborhood_only:bool=False, repack_binding_site:bool=True, \
-        repack_enzdes_shell:bool=True, ddG_ref_pose=None, ddG_wildtype:bool=False, \
-        n_monomers:int=1, truncate_sequence_end:int=0, excluded_amino_acid_types:str=None, \
+        repack_enzdes_shell:bool=True, ddG_ref_pose=None, n_monomers:int=1, \
+        sequence_length:int=0, ddG_wildtype:bool=False, excluded_amino_acid_types:str=None, \
         noncanonical_amino_acids:list=list(), allow_ncaa_in_design:bool=False):
     """
     Priority:
@@ -633,37 +623,26 @@ def create_task_factory(nopack_positions:set=set(), pre_mutation_positions:set=s
             all_AAs.add(ncaa_name1)
         task_factory.set_packer_palette(ncaa_palette)
 
-    # Site-directed AA substitutions positions.
     # Repack its surrounding shell w/o including the focus region itself.
-    site_directed_substitution_positions = pre_mutation_positions.copy()
-
-    # Repack its surrounding shell along with the focus region itself if not static.
-    repack_shell_focus_positions = pre_mutation_positions.copy()
-
-    # Specify the point mutations.
-    mutation_positions = set()
+    # Specify the point mutations. Not include pre mutation positions.
+    packer_mutation_positions = set()
     for point_mutation in point_mutations:
         mutating_position, target_AA = point_mutation.split(",")
-        mutation_positions.add(mutating_position)
+        packer_mutation_positions.add(mutating_position)
         if not ddG_wildtype:
             restriction = RestrictAbsentCanonicalAASRLT()
             restriction.aas_to_keep(target_AA)
             task_factory.push_back(OperateOnResidueSubset(restriction, \
                     ResidueIndexSelector(mutating_position)))
-    site_directed_substitution_positions.update(mutation_positions)
+    mutation_positions = packer_mutation_positions.union(pre_mutation_positions)
 
-    # Select the design positions.
-    design_selection = OrResidueSelector()
     # Specify the site-directed design positions.
-    design_positions = design_positions - mutation_positions
-    if len(design_positions.intersection(nopack_positions)) > 0:
-        raise Exception("Site-directed design positions cannot contain nopack positions.")
-    site_directed_design_selection = ResidueIndexSelector(",".join(design_positions) + ",")
-    design_selection.add_residue_selector(site_directed_design_selection)
-    site_directed_substitution_positions.update(design_positions)
-
-    # Site-directed AA substitutions positions. May include nopack positions or pre-mutation positions.
-    substitution_selection = ResidueIndexSelector(",".join(site_directed_substitution_positions) + ",")
+    design_positions = design_positions - packer_mutation_positions
+    if len(design_positions.intersection(specified_static_positions)) > 0:
+        raise Exception("Site-directed design positions cannot contain specified static positions.")
+    design_selection = ResidueIndexSelector(",".join(design_positions) + ",")
+    packer_substitution_selection = ResidueIndexSelector(",".join(\
+            packer_mutation_positions.union(design_positions)) + ",")
 
     # Design its surrounding shell and repack the focus region itself.
     design_shell_focus_positions = set()
@@ -672,6 +651,8 @@ def create_task_factory(nopack_positions:set=set(), pre_mutation_positions:set=s
     if design_enzdes_shell:
         design_shell_focus_positions.update(enzdes_positions)
     # Repack its surrounding shell along with the focus region itself.
+    # Repack pre-mutations.
+    repack_shell_focus_positions = pre_mutation_positions.copy()
     if repack_binding_site:
         repack_shell_focus_positions.update(theozyme_positions)
     if repack_enzdes_shell:
@@ -679,7 +660,7 @@ def create_task_factory(nopack_positions:set=set(), pre_mutation_positions:set=s
     # Repack this region in addition to the surrounding shell repack region.
     additional_repacking_positions = theozyme_positions.union(enzdes_positions)
     # The following 3 selections may contain site-directed substitution positions 
-    # or nopack positions or redundant ddG_ref_pose positions. Use with caution.
+    # or specified static positions or redundant ddG_ref_pose positions.
     design_shell_focus_selection = ResidueIndexSelector(",".join(\
             design_shell_focus_positions) + ",")
     repack_shell_focus_selection = ResidueIndexSelector(",".join(\
@@ -689,18 +670,19 @@ def create_task_factory(nopack_positions:set=set(), pre_mutation_positions:set=s
 
     # Design the theozyme-protein interface.
     design_shell_selection = select_neighborhood_region(design_shell_focus_selection, False)
-    # Exclude the site-directed AA substitutions and nopack positions from the design shell.
-    design_shell_selection = AndResidueSelector(design_shell_selection, \
-            NotResidueSelector(ResidueIndexSelector(",".join(\
-            site_directed_substitution_positions.union(nopack_positions)) + ",")))
+    # Fix the design positions (or not).
+    # Exclude the site-directed substitution positions and static positions.
     if ddG_ref_pose is not None:
-        # Fix the design positions and truncate redundant ddG_ref_pose positions.
-        binding_site_positions = boolean_vector_to_indices_set(\
-                design_shell_selection.apply(ddG_ref_pose), \
-                n_monomers=n_monomers, truncate_sequence_end=truncate_sequence_end)
+        assert sequence_length > 0
+        binding_site_positions = set(filter(lambda x: int(x) <= sequence_length, \
+                boolean_vector_to_indices_set(design_shell_selection.apply(ddG_ref_pose), \
+                n_monomers=n_monomers))) - mutation_positions - specified_static_positions
         design_shell_selection = ResidueIndexSelector(",".join(binding_site_positions) + ",")
-    design_selection.add_residue_selector(design_shell_selection)
-    substitution_selection = OrResidueSelector(substitution_selection, design_shell_selection)
+    else:
+        design_shell_selection = AndResidueSelector(design_shell_selection, \
+                NotResidueSelector(ResidueIndexSelector(",".join(\
+                mutation_positions.union(specified_static_positions)) + ",")))
+    packer_substitution_selection = OrResidueSelector(packer_substitution_selection, design_shell_selection)
 
     # Every position is designable by defalut in the task factory other than specification.
     if excluded_amino_acid_types and not ddG_wildtype:
@@ -708,91 +690,76 @@ def create_task_factory(nopack_positions:set=set(), pre_mutation_positions:set=s
         excluded_AAs = set(excluded_amino_acid_types)
         restriction = RestrictAbsentCanonicalAASRLT(",".join(all_AAs - excluded_AAs))
         restriction.aas_to_keep()
-        task_factory.push_back(OperateOnResidueSubset(restriction, design_selection))
+        task_factory.push_back(OperateOnResidueSubset(restriction, \
+                OrResidueSelector(design_selection, design_shell_selection)))
 
-    # Exclude nopack positions from repacking.
-    nopack_selection = ResidueIndexSelector(",".join(nopack_positions) + ",")
-    # Need to exclude pre-mutation positions from substitution via packer positions.
-    # In other words, explicitly include pre-mutation positions in repacking.
-    substitution_via_packer_selection = AndResidueSelector(substitution_selection, \
-            NotResidueSelector(ResidueIndexSelector(",".join(pre_mutation_positions) + ",")))
+    # Repacking region w/o AA type change.
     if repack_neighborhood_only:
         # Repack the neighborhood region of the AA substitutions and theozyme positions.
-        # min_shell_focus_selection may contain nopack positions or redundant ddG_ref_pose positions.
+        # May contain specified static positions or redundant ddG_ref_pose positions.
         min_shell_focus_selection = select_neighborhood_region(OrResidueSelector(\
-                substitution_selection, repack_shell_focus_selection), True)
+                packer_substitution_selection, repack_shell_focus_selection), True)
         min_shell_focus_selection = OrResidueSelector(min_shell_focus_selection, \
                 additional_repacking_selection)
-        if ddG_ref_pose is not None:
-            # Fix the repacking positions. # type(min_shell_focus_selection) == set
-            min_shell_focus_selection = boolean_vector_to_indices_set(\
-                    min_shell_focus_selection.apply(ddG_ref_pose), n_monomers=n_monomers)
-            # Filter out redundant ddG_ref_pose positions.
-            pack_positions = boolean_vector_to_indices_set(ResidueIndexSelector(\
-                    ",".join(min_shell_focus_selection) + ",").apply(ddG_ref_pose), \
-                    n_monomers=n_monomers, truncate_sequence_end=truncate_sequence_end)\
-                    - nopack_positions
-            pack_selection = ResidueIndexSelector(",".join(pack_positions) + ",")
-        else:
-            pack_selection = AndResidueSelector(min_shell_focus_selection, \
-                    NotResidueSelector(nopack_selection))
-        if not ddG_wildtype:
-            # Exclude substitution via packer positions and nopack positions from repacking.
-            repacking_selection = AndResidueSelector(pack_selection, NotResidueSelector(\
-                    substitution_via_packer_selection))
-        else:
-            repacking_selection = pack_selection
-        task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), repacking_selection))
-        # No repacking region.
-        task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), pack_selection, True))
     else:
-        if not ddG_wildtype:
-            # Exclude substitution via packer positions and nopack positions from repacking.
-            not_repacking_selection = OrResidueSelector(substitution_via_packer_selection, nopack_selection)
-        else:
-            not_repacking_selection = nopack_selection
-        task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), \
-                not_repacking_selection, True))
-        task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), nopack_selection))
-        min_shell_focus_selection = None
+        min_shell_focus_selection = TrueResidueSelector()
+    # Fix the repacking positions (or not).
+    # Exclude the specified static positions.
+    if ddG_ref_pose is not None:
+        min_shell_focus_positions = boolean_vector_to_indices_set(\
+                min_shell_focus_selection.apply(ddG_ref_pose), n_monomers=n_monomers)
+        min_shell_focus_selection = ResidueIndexSelector(",".join(min_shell_focus_positions) + ",")
+        packer_sampling_positions = set(filter(lambda x: int(x) <= sequence_length, \
+                min_shell_focus_positions)) - specified_static_positions
+        packer_sampling_selection = ResidueIndexSelector(",".join(packer_sampling_positions) + ",")
+    else:
+        packer_sampling_selection = AndResidueSelector(min_shell_focus_selection, \
+                NotResidueSelector(ResidueIndexSelector(",".join(specified_static_positions) + ",")))
 
-    return task_factory, min_shell_focus_selection
+    # Set the repacking and static region in the task factory.
+    if ddG_wildtype:
+        # Repack instead of mutate or design.
+        repacking_selection = packer_sampling_selection
+    else:
+        # Exclude packer substitution positions from repacking.
+        repacking_selection = AndResidueSelector(packer_sampling_selection, \
+                NotResidueSelector(packer_substitution_selection))
+    task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), repacking_selection))
+    task_factory.push_back(OperateOnResidueSubset(PreventRepackingRLT(), packer_sampling_selection, True))
 
-def create_move_map(focus_selection, minimize_neighborhood_only:bool=False, \
-        static_positions:set=set(), ddG_ref_pose=None, n_monomers=1, \
-        truncate_sequence_end=0, jump_edges:set=set()):
+    return task_factory, min_shell_focus_selection, packer_sampling_selection
+
+def create_move_map(assembly_length:int, focus_selection=None, static_positions:set=set(), \
+        ddG_ref_pose=None, n_monomers:int=1, sequence_length:int=0, jump_edges:set=set()):
     '''
-    When "minimize_neighborhood_only" is True, only the "focus_selection" along with 
+    If "minimize_neighborhood_only" is True, only the "focus_selection" along with 
     its neighborhood region are subject to minimization except the static positions.
     Set a residue to static does not mean not to repack and minimize the residues 
     around it, especially when the static residue is included in the theozyme positions.
     '''
-    static_selection = ResidueIndexSelector(",".join(static_positions) + ",")
-    if minimize_neighborhood_only:
-        if focus_selection == None:
-            raise Exception("Using -min_nbh is not allowed without using -rpk_nbh at the same time.")
-        if type(focus_selection) == set:
-            assert ddG_ref_pose is not None
-            focus_selection = ResidueIndexSelector(",".join(focus_selection) + ",")
+    if focus_selection is not None:
         minimization_selection = select_neighborhood_region(focus_selection, True)
-        if len(static_positions) > 0:
-            minimization_selection = AndResidueSelector(minimization_selection, \
-                    NotResidueSelector(static_selection))
         if ddG_ref_pose is not None:
-            # Fix the minimization positions and truncate redundant ddG_ref_pose positions.
-            minimization_vector = boolean_vector_to_indices_set(\
-                    minimization_selection.apply(ddG_ref_pose), n_monomers=n_monomers, \
-                    truncate_sequence_end=truncate_sequence_end, output_vector=True)
+            assert sequence_length > 0
+            # Fix the minimization positions.
+            minimization_positions = set(filter(lambda x: int(x) <= sequence_length, \
+                    boolean_vector_to_indices_set(minimization_selection.apply(ddG_ref_pose), \
+                    n_monomers=n_monomers))) - static_positions
+            minimization_vector = vector1_bool(assembly_length)
+            for minimization_position in minimization_positions:
+                minimization_vector[int(minimization_position)] = True
             move_map = MoveMap()
             move_map.set_bb(minimization_vector)
             move_map.set_chi(minimization_vector)
         else: # Pass residue selectors to a movemap factory.
+            minimization_selection = AndResidueSelector(minimization_selection, \
+                    NotResidueSelector(ResidueIndexSelector(",".join(static_positions) + ",")))
             move_map = MoveMapFactory()
             move_map.add_bb_action(move_map_action.mm_enable, minimization_selection)
             move_map.add_chi_action(move_map_action.mm_enable, minimization_selection)
     else:
-        minimization_vector = vector1_bool(len(focus_selection))
-        for pose_index in range(1, len(focus_selection) + 1):
+        minimization_vector = vector1_bool(assembly_length)
+        for pose_index in range(1, assembly_length + 1):
             minimization_vector[pose_index] = True
         for static_position in static_positions:
             minimization_vector[str(static_position)] = False
@@ -928,7 +895,7 @@ def energy_metric(score_function, pose, selection=None, score_type:str=None):
     if score_type:
         exec("metric.set_scoretype(ScoreType.{})".format(score_type))
     # Add the selector
-    if selection:
+    if selection is not None:
         metric.set_residue_selector(selection)
     return metric.calculate(pose)
 
@@ -1169,12 +1136,6 @@ def main(args):
     sequence_length = len(wildtype_sequence)
     if not args.output_filename_mutations_suffix:
         wildtype_sequence = str()
-    if args.ddG_reference_pdb:
-        ddG_reference_sequence_length = len(ddG_ref_pose.sequence())
-        truncate_sequence_end = ddG_reference_sequence_length - sequence_length
-        assert truncate_sequence_end >= 0
-    else:
-        truncate_sequence_end = 0
     # Convert pdb numberings to pose numberings.
     # Any ddG_ref_pose redundant positions in -static, -mut and -des will be ignored.
     static_pose_indices, _ = pdb_to_pose_numbering(pose, args.static_residues)
@@ -1278,11 +1239,10 @@ def main(args):
     for geometry_constraint in geometry_constraints:
         pose.add_constraint(geometry_constraint)
     # Create the task factory.
-    task_factory, min_shell_focus_selection = create_task_factory(\
-            nopack_positions=static_pose_indices, \
+    task_factory, min_shell_focus_selection, packer_sampling_selection = \
+            create_task_factory(specified_static_positions=static_pose_indices, \
             pre_mutation_positions=pre_mutation_pose_indices, \
-            point_mutations=mutations, \
-            design_positions=design_pose_indices, \
+            point_mutations=mutations, design_positions=design_pose_indices, \
             theozyme_positions=theozyme_pose_indices, \
             enzdes_positions=enzdes_pose_indices, \
             design_binding_site=args.design_binding_site, \
@@ -1290,8 +1250,8 @@ def main(args):
             repack_neighborhood_only=args.repack_neighborhood_only, \
             repack_binding_site=not args.no_repack_binding_site, \
             repack_enzdes_shell=not args.no_repack_enzdes_shell, \
-            ddG_ref_pose=ddG_ref_pose, ddG_wildtype=args.ddG_wildtype, \
-            n_monomers=n_monomers, truncate_sequence_end=truncate_sequence_end, \
+            ddG_ref_pose=ddG_ref_pose, n_monomers=n_monomers, \
+            sequence_length=sequence_length, ddG_wildtype=args.ddG_wildtype, \
             excluded_amino_acid_types=args.excluded_amino_acid_types, \
             noncanonical_amino_acids=args.noncanonical_amino_acids, \
             allow_ncaa_in_design=args.allow_ncaa_in_design)
@@ -1304,15 +1264,7 @@ def main(args):
     no_coord_cst_selection.add_residue_selector(ResidueIndexSelector(\
             ",".join(no_coord_cst_residues) + ","))
     if args.no_coordinate_constraints_on_packing_region:
-        if not min_shell_focus_selection:
-            no_coord_cst_selection = TrueResidueSelector()
-        elif type(min_shell_focus_selection) == set:
-            pack_positions = set(filter(lambda index: int(index) <= sequence_length, \
-                    min_shell_focus_selection)) - static_pose_indices
-            no_coord_cst_selection.add_residue_selector(ResidueIndexSelector(\
-                    ",".join(pack_positions) + ","))
-        else:
-            no_coord_cst_selection.add_residue_selector(min_shell_focus_selection)
+        no_coord_cst_selection.add_residue_selector(packer_sampling_selection)
     add_csts = AddConstraints()
     bb_coord_cst_gen = create_coordinate_constraints(reference_pose=coord_ref_pose, \
             selection=NotResidueSelector(no_coord_cst_selection), \
@@ -1352,12 +1304,14 @@ def main(args):
         pre_minimizer = create_minimizer(score_function, move_map=pre_minimization_move_map)
         movers.append(pre_minimizer)
     # Create the move map.
-    if not args.minimize_neighborhood_only:
-        min_shell_focus_selection = assembly_length
-    move_map = create_move_map(min_shell_focus_selection, \
-            minimize_neighborhood_only=args.minimize_neighborhood_only, \
+    if not args.repack_neighborhood_only:
+        if args.minimize_neighborhood_only:
+            raise Exception("Using -min_nbh is not allowed without using -rpk_nbh at the same time.")
+        else:
+            min_shell_focus_selection = None
+    move_map = create_move_map(assembly_length, focus_selection=min_shell_focus_selection, \
             static_positions=static_pose_indices, ddG_ref_pose=ddG_ref_pose, \
-            n_monomers=n_monomers, truncate_sequence_end=truncate_sequence_end, \
+            n_monomers=n_monomers, sequence_length=sequence_length, \
             jump_edges=rigid_body_tform_jump_edges)
     # Create the fast relax mover.
     fast_relax = create_fast_relax_mover(score_function, task_factory, move_map=move_map)
