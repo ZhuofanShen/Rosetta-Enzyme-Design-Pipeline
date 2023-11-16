@@ -484,8 +484,8 @@ def get_enzdes_pose_indices(pdb_info, pdb, symmetry):
     enzdes_substrate_pose_indices = set()
     enzdes_res_pose_indices = set()
     main_chain = None
-    with open(pdb, "r") as pdb:
-        for line in pdb:
+    with open(pdb, "r") as fpdb:
+        for line in fpdb:
             if line.startswith("REMARK 666 MATCH TEMPLATE"):
                 line_split = list(filter(lambda x: x, line.split(" ")))
                 # substrate
@@ -815,13 +815,14 @@ def parse_cloud_pdb(cloud_pdb):
                     chain_id = line_split[4]
                     substrate_name3 = line_split[5]
                     pdb_index = line_split[6]
+                    space = " " * (4 - len(pdb_index))
                 pdb_lines.append(line)
                 read_rotamer = False
             elif line.startswith("ATOM  ") or line.startswith("HETATM"):
                 res_name3 = line[17:20].strip(" ")
                 if read_rotamer:
                     if res_name3 == substrate_name3:
-                        rotamer_lines.append(line[:21] + chain_id + pdb_index + line[26:])
+                        rotamer_lines.append(line[:21] + chain_id + space + pdb_index + line[26:])
                 else:
                     if res_name3 == substrate_name3 and line[21] == chain_id and \
                             line[22:26] == pdb_index:
@@ -889,8 +890,21 @@ def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
         n_decoys:int=50, save_n_decoys:int=1, theozyme_positions:set=set(), \
         output_filename_prefix:str=None, wildtype_sequence:str=str()):
     if not output_filename_prefix:
-        output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
-    decoy_scores_list = [None] * save_n_decoys
+        output_filename_prefix = os.path.basename(pose.pdb_info().name())\
+                .rstrip(".pdb").rstrip(".tmp") + "_relaxed"
+    if os.path.abspath(pose.pdb_info().name().rstrip(".pdb").rstrip(".tmp")) == \
+            os.path.abspath("") + "/" + output_filename_prefix:
+        raise Exception("Please assign an output filename prefix different than the input pdb filename \
+                or store the input pdb file in a folder other than the current directory.")
+    if os.path.isfile(output_filename_prefix + ".sc"):
+        decoy_scores_list = list()
+        with open(output_filename_prefix + ".sc", "r") as pf:
+            for line in pf:
+                scores = json.loads(line)
+                scores.pop("decoy", None)
+                decoy_scores_list.append(scores)
+    else:
+        decoy_scores_list = [None] * save_n_decoys
     decoy_filenames_list = [None] * save_n_decoys
     checkpoint_filename_scores = dict()
     for filename in filter(lambda f: f.startswith(output_filename_prefix) and \
@@ -901,49 +915,52 @@ def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
             checkpoint_filename_scores[filename] = scores
         elif len(filename_split) >= 3 and filename_split[-2].isdigit():
             ith_ranked_decoy = int(filename_split[-2])
-            now_saved_n_decoys = len(decoy_scores_list)
-            if ith_ranked_decoy <= now_saved_n_decoys:
-                decoy_scores_list[ith_ranked_decoy - 1] = scores
+            if ith_ranked_decoy <= len(decoy_scores_list):
+                existing_scores = decoy_scores_list[ith_ranked_decoy - 1]
+                if existing_scores:
+                    assert existing_scores["total_score"] - scores["total_score"] < 0.1
+                else:
+                    decoy_scores_list[ith_ranked_decoy - 1] = scores
+            else:
+                decoy_scores_list = decoy_scores_list + [None] * (ith_ranked_decoy - \
+                        len(decoy_scores_list) - 1) + [scores]
+            if ith_ranked_decoy <= len(decoy_filenames_list):
                 decoy_filenames_list[ith_ranked_decoy - 1] = filename
             else:
-                decoy_scores_list = decoy_scores_list + [None] * (ith_ranked_decoy - now_saved_n_decoys \
-                        - 1) + [scores]
                 decoy_filenames_list = decoy_filenames_list + [None] * (ith_ranked_decoy - \
-                        now_saved_n_decoys - 1) + [filename]
+                        len(decoy_filenames_list) - 1) + [filename]
         else:
             if filename.endswith("_tmp.pdb"):
                 os.remove(filename)
             else:
                 checkpoint_filename_scores[filename] = scores
+    n_finished_decoys = 0
     checkpoint_saved = False
     for filename, scores in sorted(checkpoint_filename_scores.items(), key=lambda x: x[1]["total_score"]):
         if checkpoint_saved:
             raise Exception("More than one checkpoint file found in the current directory!")
         if filename.endswith("_checkpoint.pdb"):
             n_finished_decoys = min(int(filename[:-4].split(".")[-1].split("_")[0]), n_decoys)
-        else:
-            n_finished_decoys = n_decoys
         decoy_scores_list[0] = scores
         decoy_filenames_list[0] = filename
         checkpoint_saved = True
-    decoy_scores_list = list(filter(lambda sc: sc, decoy_scores_list))
+    decoy_scores_list_1 = list(filter(lambda s: s,map(lambda s, f: s if f else None, \
+            decoy_scores_list[:len(decoy_filenames_list)], decoy_filenames_list)))
+    decoy_scores_list_2 = decoy_scores_list[len(decoy_filenames_list):]
     decoy_filenames_list = list(filter(lambda fn: fn, decoy_filenames_list))
-    now_saved_n_decoys = len(decoy_filenames_list)
-    if now_saved_n_decoys >= save_n_decoys:
-        decoy_scores_list = decoy_scores_list[:save_n_decoys]
+    if len(decoy_filenames_list) >= save_n_decoys:
+        decoy_scores_list = decoy_scores_list_1 + decoy_scores_list_2
+        for decoy_filename in decoy_filenames_list[save_n_decoys:]:
+            os.remove(decoy_filename)
         decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
-    if not checkpoint_saved:
-        n_finished_decoys = now_saved_n_decoys
-    now_unsaved_n_decoys = save_n_decoys - now_saved_n_decoys
+    else:
+        decoy_scores_list = decoy_scores_list_1
+    if not n_finished_decoys:
+        n_finished_decoys = len(decoy_scores_list_1) + len(decoy_scores_list_2)
+    now_unsaved_n_decoys = save_n_decoys - len(decoy_filenames_list)
     n_unfinished_decoys = n_decoys - n_finished_decoys
     if now_unsaved_n_decoys > n_unfinished_decoys:
         n_decoys += now_unsaved_n_decoys - n_unfinished_decoys
-    for load_index, ranked_decoy_filename in enumerate(decoy_filenames_list[1:]):
-        new_ranked_decoy_filename = ranked_decoy_filename[:ranked_decoy_filename[:-4].rfind(".")] + \
-                "." + str(load_index + 2) + ".pdb"
-        if new_ranked_decoy_filename != ranked_decoy_filename:
-            os.rename(ranked_decoy_filename, new_ranked_decoy_filename)
-            decoy_filenames_list[load_index + 1] = new_ranked_decoy_filename
     if len(decoy_filenames_list) > 0:
         checkpoint_filename = decoy_filenames_list[0]
         new_checkpoint_filename = None
@@ -958,16 +975,29 @@ def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
         if new_checkpoint_filename:
             os.rename(checkpoint_filename, new_checkpoint_filename)
             decoy_filenames_list[0] = new_checkpoint_filename
+    for load_index, ranked_decoy_filename in enumerate(decoy_filenames_list[1:]):
+        new_ranked_decoy_filename = ranked_decoy_filename[:ranked_decoy_filename[:-4].rfind(".")] + \
+                "." + str(load_index + 2) + ".pdb"
+        if new_ranked_decoy_filename != ranked_decoy_filename:
+            os.rename(ranked_decoy_filename, new_ranked_decoy_filename)
+            decoy_filenames_list[load_index + 1] = new_ranked_decoy_filename
+    if len(decoy_scores_list) > 0:
         with open(output_filename_prefix + ".sc", "w") as pf:
-            for filename, scores in zip(decoy_filenames_list, decoy_scores_list):
-                scores["decoy"] = filename
+            for ith_decoy, scores in enumerate(decoy_scores_list):
+                if ith_decoy < len(decoy_filenames_list):
+                    filename = decoy_filenames_list[ith_decoy]
+                    scores = scores.copy()
+                    scores["decoy"] = filename
                 pf.write(json.dumps(scores) + "\n")
     for i_decoy in range(n_finished_decoys + 1, n_decoys + 1):
         if cloud_pdb_lines:
             if len(cloud_pdb_lines) > 2:
                 rotamer_index = np.random.randint(1, len(cloud_pdb_lines) - 1)
-            else:
+            elif len(cloud_pdb_lines) == 2:
                 rotamer_index = 1
+            else:
+                i_decoy = n_decoys
+                break
             rotamer_lines = cloud_pdb_lines[rotamer_index]
             del cloud_pdb_lines[rotamer_index]
             tmp_pdb = output_filename_prefix + "." + str(i_decoy) + "_tmp.pdb"
@@ -983,19 +1013,21 @@ def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
         for mover in movers:
             mover.apply(pose_copy)
         mutated_sequence = pose_copy.sequence()
-        pdb_info = pose_copy.pdb_info()
         insert_index = 0
         current_score = energy_metric(score_function, pose_copy)
-        for index in range(len(decoy_scores_list)):
-            if current_score >= decoy_scores_list[index]["total_score"]:
-                insert_index = index + 1
-            else:
+        for insert_index in range(len(decoy_scores_list)):
+            if current_score < decoy_scores_list[insert_index]["total_score"]:
                 break
+            insert_index += 1
+        scores = calculate_pose_scores(pose_copy, score_function, theozyme_positions=theozyme_positions)
+        scores["total_score"] = current_score
+        decoy_scores_list = decoy_scores_list[:insert_index] + [scores] + decoy_scores_list[insert_index:]
         current_output_filename = output_filename_prefix
         for index, wt_aa in enumerate(wildtype_sequence):
             aa = mutated_sequence[index]
             if aa != wt_aa:
-                current_output_filename += "_" + wt_aa + pdb_info.pose2pdb(index + 1).split(" ")[0] + aa
+                current_output_filename += "_" + wt_aa + \
+                        pose_copy.pdb_info().pose2pdb(index + 1).split(" ")[0] + aa
         if i_decoy < n_decoys:
             checkpoint_file_suffix = "." + str(i_decoy) + "_checkpoint.pdb"
         else:
@@ -1031,19 +1063,18 @@ def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
             else:
                 current_output_filename = None
         if current_output_filename:
-            scores = calculate_pose_scores(pose_copy, score_function, theozyme_positions=theozyme_positions)
-            scores["total_score"] = current_score
-            decoy_scores_list = decoy_scores_list[:insert_index] + [scores] + decoy_scores_list[insert_index:]
             pose_copy.dump_pdb(current_output_filename)
             decoy_filenames_list = decoy_filenames_list[:insert_index] + [current_output_filename] + \
                     decoy_filenames_list[insert_index:]
             if len(decoy_filenames_list) > save_n_decoys:
-                decoy_scores_list = decoy_scores_list[:save_n_decoys]
                 os.remove(decoy_filenames_list[save_n_decoys])
                 decoy_filenames_list = decoy_filenames_list[:save_n_decoys]
         with open(output_filename_prefix + ".sc", "w") as pf:
-            for filename, scores in zip(decoy_filenames_list, decoy_scores_list):
-                scores["decoy"] = filename
+            for ith_decoy, scores in enumerate(decoy_scores_list):
+                if ith_decoy < len(decoy_filenames_list):
+                    filename = decoy_filenames_list[ith_decoy]
+                    scores = scores.copy()
+                    scores["decoy"] = filename
                 pf.write(json.dumps(scores) + "\n")
 
 def run_job_distributor(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
@@ -1051,12 +1082,18 @@ def run_job_distributor(score_function, pose, pre_mutators, fold_tree, chi_dihed
         constraints, favor_native_residue, movers, cloud_pdb_lines:list=None, \
         n_decoys:int=5, output_filename_prefix:str=None, wildtype_sequence:str=str()):
     if not output_filename_prefix:
-        output_filename_prefix = pose.pdb_info().name().split("/")[-1][:-4]
+        output_filename_prefix = os.path.basename(pose.pdb_info().name())\
+                .rstrip(".pdb").rstrip(".tmp") + "_relaxed"
     job_distributor = PyJobDistributor(output_filename_prefix, n_decoys, score_function)
     while not job_distributor.job_complete:
         i_decoy = job_distributor.current_id
         if cloud_pdb_lines:
-            rotamer_index = np.random.randint(1, len(cloud_pdb_lines) - 1)
+            if len(cloud_pdb_lines) > 2:
+                rotamer_index = np.random.randint(1, len(cloud_pdb_lines) - 1)
+            elif len(cloud_pdb_lines) == 2:
+                rotamer_index = 1
+            else:
+                break
             rotamer_lines = cloud_pdb_lines[rotamer_index]
             del cloud_pdb_lines[rotamer_index]
             tmp_pdb = output_filename_prefix + "." + str(i_decoy) + "_tmp.pdb"
@@ -1090,11 +1127,12 @@ def main(args):
     if args.cloud_pdb: # Parse cloud pdb.
         cloud_pdb_lines = parse_cloud_pdb(args.pdb)
         args.n_decoys = min(args.n_decoys, len(cloud_pdb_lines[1:]))
-        with open(args.pdb[:-4] + ".tmp.pdb", "w") as pf:
+        tmp_pdb = args.pdb.rstrip(".pdb") + ".tmp.pdb"
+        with open(tmp_pdb, "w") as pf:
             pf.writelines(cloud_pdb_lines[0])
             pf.writelines(cloud_pdb_lines[1])
-        pose = pose_from_pdb(args.pdb[:-4] + ".tmp.pdb")
-        os.remove(args.pdb[:-4] + ".tmp.pdb")
+        pose = pose_from_pdb(tmp_pdb)
+        os.remove(tmp_pdb)
     else:
         cloud_pdb_lines = None
         pose = pose_from_pdb(args.pdb)
