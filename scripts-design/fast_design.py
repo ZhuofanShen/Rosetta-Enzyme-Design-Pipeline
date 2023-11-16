@@ -14,7 +14,7 @@ from pyrosetta.rosetta.core.pack.task.operation import \
     PreventRepackingRLT
 from pyrosetta.rosetta.core.scoring import ScoreType
 from pyrosetta.rosetta.core.scoring.constraints import \
-    add_fa_constraints_from_cmdline, ConstraintSet, AmbiguousConstraint, \
+    add_fa_constraints_from_cmdline, AmbiguousConstraint, \
     AtomPairConstraint, AngleConstraint, DihedralConstraint
 from pyrosetta.rosetta.core.scoring.func import HarmonicFunc, \
     FlatHarmonicFunc, CircularHarmonicFunc
@@ -179,14 +179,11 @@ def set_score_function(score_function_name:str, symmetry:bool=False, score_terms
         score_function.set_weight(ScoreType.fa_water_to_bilayer, 1)
     if cartesian:
         score_function.set_weight(ScoreType.cart_bonded, 0.5)
-        # score_function.set_weight(ScoreType.pro_close, 0)
-        # score_function.set_weight(ScoreType.metalbinding_constraint, 0)
-        # score_function.set_weight(ScoreType.chainbreak, 0)
+    elif constraints:
+        score_function.set_weight(ScoreType.pro_close, 1.25)
+        score_function.set_weight(ScoreType.metalbinding_constraint, 1)
+        score_function.set_weight(ScoreType.chainbreak, 1)
     if constraints:
-        if not cartesian:
-            score_function.set_weight(ScoreType.pro_close, 1.25)
-            score_function.set_weight(ScoreType.metalbinding_constraint, 1)
-            score_function.set_weight(ScoreType.chainbreak, 1)
         score_function.set_weight(ScoreType.atom_pair_constraint, 1)
         score_function.set_weight(ScoreType.coordinate_constraint, 1)
         score_function.set_weight(ScoreType.angle_constraint, 1)
@@ -480,18 +477,12 @@ def create_constraints(pose, constraint_atoms, constraint_parameters, bounded_di
                 constraints.append(constraint)
     return constraints
 
-def create_enzdes_constraints():
-    enz_cst = AddOrRemoveMatchCsts()
-    enz_cst.set_cst_action(ADD_NEW)
-    return enz_cst
-
 def get_enzdes_pose_indices(pdb_info, pdb, symmetry):
     '''
     Get pose indices of enzdes positions by reading the pdb file REMARK 666 header.
     '''
     enzdes_substrate_pose_indices = set()
     enzdes_res_pose_indices = set()
-    flag = False
     main_chain = None
     with open(pdb, "r") as pdb:
         for line in pdb:
@@ -511,8 +502,7 @@ def get_enzdes_pose_indices(pdb_info, pdb, symmetry):
                     motif_res_id = int(line_split[11])
                     motif_pose_id = pdb_info.pdb2pose(motif_chain_id, motif_res_id)
                     enzdes_res_pose_indices.add(str(motif_pose_id))
-                flag = True
-            elif flag:
+            elif line.startswith("ATOM  ") or line.startswith("HETATM"):
                 break
     return enzdes_substrate_pose_indices, enzdes_res_pose_indices
 
@@ -644,22 +634,21 @@ def create_task_factory(specified_static_positions:set=set(), pre_mutation_posit
     packer_substitution_selection = ResidueIndexSelector(",".join(\
             packer_mutation_positions.union(design_positions)) + ",")
 
-    # Design its surrounding shell and repack the focus region itself.
+    # Design the surrounding shell of the focus region.
     design_shell_focus_positions = set()
     if design_binding_site:
         design_shell_focus_positions.update(theozyme_positions)
     if design_enzdes_shell:
         design_shell_focus_positions.update(enzdes_positions)
-    # Repack its surrounding shell along with the focus region itself.
-    # Repack pre-mutations.
+    # Repack the surrounding shell of the focus region.
     repack_shell_focus_positions = pre_mutation_positions.copy()
     if repack_binding_site:
         repack_shell_focus_positions.update(theozyme_positions)
     if repack_enzdes_shell:
         repack_shell_focus_positions.update(enzdes_positions)
-    # Repack this region in addition to the surrounding shell repack region.
+    # Always repack the focus region itself.
     additional_repacking_positions = theozyme_positions.union(enzdes_positions)
-    # The following 3 selections may contain site-directed substitution positions 
+    # The following 3 selections may contain pre-mutation positions 
     # or specified static positions or redundant ddG_ref_pose positions.
     design_shell_focus_selection = ResidueIndexSelector(",".join(\
             design_shell_focus_positions) + ",")
@@ -721,7 +710,7 @@ def create_task_factory(specified_static_positions:set=set(), pre_mutation_posit
         # Repack instead of mutate or design.
         repacking_selection = packer_sampling_selection
     else:
-        # Exclude packer substitution positions from repacking.
+        # Exclude the packer substitution positions from repacking.
         repacking_selection = AndResidueSelector(packer_sampling_selection, \
                 NotResidueSelector(packer_substitution_selection))
     task_factory.push_back(OperateOnResidueSubset(RestrictToRepackingRLT(), repacking_selection))
@@ -729,47 +718,31 @@ def create_task_factory(specified_static_positions:set=set(), pre_mutation_posit
 
     return task_factory, min_shell_focus_selection, packer_sampling_selection
 
-def create_move_map(assembly_length:int, focus_selection=None, static_positions:set=set(), \
-        ddG_ref_pose=None, n_monomers:int=1, sequence_length:int=0, jump_edges:set=set()):
-    '''
-    If "minimize_neighborhood_only" is True, only the "focus_selection" along with 
-    its neighborhood region are subject to minimization except the static positions.
-    Set a residue to static does not mean not to repack and minimize the residues 
-    around it, especially when the static residue is included in the theozyme positions.
-    '''
-    if focus_selection is not None:
-        minimization_selection = select_neighborhood_region(focus_selection, True)
-        if ddG_ref_pose is not None:
-            assert sequence_length > 0
-            # Fix the minimization positions.
-            minimization_positions = set(filter(lambda x: int(x) <= sequence_length, \
-                    boolean_vector_to_indices_set(minimization_selection.apply(ddG_ref_pose), \
-                    n_monomers=n_monomers))) - static_positions
-            minimization_vector = vector1_bool(assembly_length)
-            for minimization_position in minimization_positions:
-                minimization_vector[int(minimization_position)] = True
-            move_map = MoveMap()
-            move_map.set_bb(minimization_vector)
-            move_map.set_chi(minimization_vector)
-        else: # Pass residue selectors to a movemap factory.
-            minimization_selection = AndResidueSelector(minimization_selection, \
-                    NotResidueSelector(ResidueIndexSelector(",".join(static_positions) + ",")))
-            move_map = MoveMapFactory()
-            move_map.add_bb_action(move_map_action.mm_enable, minimization_selection)
-            move_map.add_chi_action(move_map_action.mm_enable, minimization_selection)
-    else:
+def create_move_map(focus_selection, static_positions:set=set(), ddG_ref_pose=None, \
+        n_monomers:int=1, sequence_length:int=0, assembly_length:int=0, jump_edges:set=set()):
+    # Only the focus selection along with its neighborhood shell wll be subject to 
+    # backbone and sidechain minimization except the static positions.
+    minimization_selection = select_neighborhood_region(focus_selection, True)
+    if ddG_ref_pose is not None: # Create a move map with fixed minimization positions.
+        assert sequence_length > 0
+        assert assembly_length > 0
+        minimization_positions = set(filter(lambda x: int(x) <= sequence_length, \
+                boolean_vector_to_indices_set(minimization_selection.apply(ddG_ref_pose), \
+                n_monomers=n_monomers))) - static_positions
         minimization_vector = vector1_bool(assembly_length)
-        for pose_index in range(1, assembly_length + 1):
-            minimization_vector[pose_index] = True
-        for static_position in static_positions:
-            minimization_vector[str(static_position)] = False
+        for minimization_position in minimization_positions:
+            minimization_vector[int(minimization_position)] = True
         move_map = MoveMap()
         move_map.set_bb(minimization_vector)
         move_map.set_chi(minimization_vector)
-    if type(move_map) == MoveMap:
         for jump_edge in jump_edges:
             move_map.set_jump(jump_edge, True)
-    else:
+    else: # Create a movemap factory using residue and jump selectors.
+        minimization_selection = AndResidueSelector(minimization_selection, \
+                NotResidueSelector(ResidueIndexSelector(",".join(static_positions) + ",")))
+        move_map = MoveMapFactory()
+        move_map.add_bb_action(move_map_action.mm_enable, minimization_selection)
+        move_map.add_chi_action(move_map_action.mm_enable, minimization_selection)
         for jump_edge in jump_edges:
             move_map.add_jump_action(move_map_action.mm_enable, JumpIndexSelector(jump_edge))
     return move_map
@@ -985,10 +958,10 @@ def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
         if new_checkpoint_filename:
             os.rename(checkpoint_filename, new_checkpoint_filename)
             decoy_filenames_list[0] = new_checkpoint_filename
-    with open(output_filename_prefix + ".sc", "w") as pf:
-        for filename, scores in zip(decoy_filenames_list, decoy_scores_list):
-            scores["decoy"] = filename
-            pf.write(json.dumps(scores) + "\n")
+        with open(output_filename_prefix + ".sc", "w") as pf:
+            for filename, scores in zip(decoy_filenames_list, decoy_scores_list):
+                scores["decoy"] = filename
+                pf.write(json.dumps(scores) + "\n")
     for i_decoy in range(n_finished_decoys + 1, n_decoys + 1):
         if cloud_pdb_lines:
             if len(cloud_pdb_lines) > 2:
@@ -1284,7 +1257,8 @@ def main(args):
     constraints.append(add_csts)
     # Add enzyme design constraints.
     if args.enzyme_design_constraints:
-        enzdes_cst = create_enzdes_constraints()
+        enzdes_cst = AddOrRemoveMatchCsts()
+        enzdes_cst.set_cst_action(ADD_NEW)
         enzdes_cst.apply(pose)
         constraints.append(enzdes_cst)
     # Add AA type constraints.
@@ -1304,15 +1278,14 @@ def main(args):
         pre_minimizer = create_minimizer(score_function, move_map=pre_minimization_move_map)
         movers.append(pre_minimizer)
     # Create the move map.
-    if not args.repack_neighborhood_only:
-        if args.minimize_neighborhood_only:
+    if args.minimize_neighborhood_only:
+        if not args.repack_neighborhood_only:
             raise Exception("Using -min_nbh is not allowed without using -rpk_nbh at the same time.")
-        else:
-            min_shell_focus_selection = None
-    move_map = create_move_map(assembly_length, focus_selection=min_shell_focus_selection, \
-            static_positions=static_pose_indices, ddG_ref_pose=ddG_ref_pose, \
-            n_monomers=n_monomers, sequence_length=sequence_length, \
-            jump_edges=rigid_body_tform_jump_edges)
+    else: # Minimize the whole pose.
+        min_shell_focus_selection = TrueResidueSelector()
+    move_map = create_move_map(min_shell_focus_selection, static_positions=static_pose_indices, \
+            ddG_ref_pose=ddG_ref_pose, n_monomers=n_monomers, sequence_length=sequence_length, \
+            assembly_length=assembly_length, jump_edges=rigid_body_tform_jump_edges)
     # Create the fast relax mover.
     fast_relax = create_fast_relax_mover(score_function, task_factory, move_map=move_map)
     movers.append(fast_relax)
