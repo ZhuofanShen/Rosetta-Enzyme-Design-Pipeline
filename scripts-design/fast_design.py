@@ -483,6 +483,7 @@ def get_enzdes_pose_indices(pdb_info, pdb, symmetry):
     '''
     enzdes_substrate_pose_indices = set()
     enzdes_res_pose_indices = set()
+    read_remark666_lines = False
     main_chain = None
     with open(pdb, "r") as fpdb:
         for line in fpdb:
@@ -502,7 +503,8 @@ def get_enzdes_pose_indices(pdb_info, pdb, symmetry):
                     motif_res_id = int(line_split[11])
                     motif_pose_id = pdb_info.pdb2pose(motif_chain_id, motif_res_id)
                     enzdes_res_pose_indices.add(str(motif_pose_id))
-            elif line.startswith("ATOM  ") or line.startswith("HETATM"):
+                read_remark666_lines = True
+            elif read_remark666_lines:
                 break
     return enzdes_substrate_pose_indices, enzdes_res_pose_indices
 
