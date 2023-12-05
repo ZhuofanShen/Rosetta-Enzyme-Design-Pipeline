@@ -1154,14 +1154,14 @@ def main(args):
         wildtype_sequence = str()
     # Convert pdb numberings to pose numberings.
     # Any index_ref_pose redundant positions in -no_pack, -no_min, -mut and -des will be ignored.
-    no_packing_pose_indices, _ = pdb_to_pose_numbering(pose, args.no_packing_residue_identities)
+    no_packing_pose_indices, _ = pdb_to_pose_numbering(pose, args.no_packing_residues)
     if args.no_packing_residue_identities:
         no_packing_pose_indices.update(residue_name3_selector(pose, \
                 args.no_packing_residue_identities, sequence_length=sequence_length))
-    no_minimizing_pose_indices, _ = pdb_to_pose_numbering(pose, args.no_minimizing_residue_identities)
+    no_minimizing_pose_indices, _ = pdb_to_pose_numbering(pose, args.no_minimizing_residues)
     if args.no_minimizing_residue_identities:
         no_minimizing_pose_indices.update(residue_name3_selector(pose, \
-                args.no_packing_residue_identities, sequence_length=sequence_length))
+                args.no_minimizing_residue_identities, sequence_length=sequence_length))
     no_packing_mutations, _ = pdb_to_pose_numbering(pose, args.no_packing_mutations)
     mutations, _ = pdb_to_pose_numbering(pose, args.mutations)
     mutations = mutations - no_packing_mutations
