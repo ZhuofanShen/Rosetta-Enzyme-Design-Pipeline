@@ -95,8 +95,12 @@ def parse_arguments():
     parser.add_argument("-enzdes_cst", "--enzyme_design_constraints", type=str)
     parser.add_argument("-no_pack", "--no_packing_residues", type=str, nargs="*", default=list())
     parser.add_argument("-no_pack_ids", "--no_packing_residue_identities", type=str, nargs="*", help="name3")
-    parser.add_argument("-no_min", "--no_minimizing_residues", type=str, nargs="*", default=list())
-    parser.add_argument("-no_min_ids", "--no_minimizing_residue_identities", type=str, nargs="*", help="name3")
+    parser.add_argument("-no_min_bb", "--no_minimizing_backbone_residues", type=str, nargs="*", default=list())
+    parser.add_argument("-no_min_bb_ids", "--no_minimizing_backbone_residue_identities", type=str, nargs="*", help="name3")
+    parser.add_argument("-no_min_sc", "--no_minimizing_sidechain_residues", type=str, nargs="*", default=list())
+    parser.add_argument("-no_min_sc_ids", "--no_minimizing_sidechain_residue_identities", type=str, nargs="*", help="name3")
+    parser.add_argument("-no_min_je", "--no_minimizing_jump_edge_residues", type=str, nargs="*", default=list())
+    parser.add_argument("-no_min_je_ids", "--no_minimizing_jump_edge_residue_identities", type=str, nargs="*", help="name3")
     parser.add_argument("-cat", "--catalytic_residues", type=str, nargs="*")
     parser.add_argument("-cat_ids", "--catalytic_residue_identities", type=str, nargs="*", help="name3")
     parser.add_argument("-subs", "--substrates", type=str, nargs="*")
@@ -723,7 +727,8 @@ def create_task_factory(specified_no_packing_positions:set=set(), \
 
     return task_factory, min_shell_focus_selection, packer_sampling_selection
 
-def create_move_map(focus_selection, no_minimizing_positions:set=set(), index_ref_pose=None, \
+def create_move_map(focus_selection, no_minimizing_backbone_positions:set=set(), 
+        no_minimizing_sidechain_positions:set=set(), index_ref_pose=None, \
         n_monomers:int=1, sequence_length:int=0, assembly_length:int=0, jump_edges:set=set()):
     # Only the focus selection along with its neighborhood shell wll be subject to 
     # backbone and sidechain minimization except the no minimizing positions.
@@ -733,21 +738,28 @@ def create_move_map(focus_selection, no_minimizing_positions:set=set(), index_re
         assert assembly_length > 0
         minimization_positions = set(filter(lambda x: int(x) <= sequence_length, \
                 boolean_vector_to_indices_set(minimization_selection.apply(index_ref_pose), \
-                n_monomers=n_monomers))) - no_minimizing_positions
-        minimization_vector = vector1_bool(assembly_length)
-        for minimization_position in minimization_positions:
-            minimization_vector[int(minimization_position)] = True
+                n_monomers=n_monomers)))
+        backbone_minimization_positions = minimization_positions - no_minimizing_backbone_positions
+        backbone_minimization_vector = vector1_bool(assembly_length)
+        for minimization_position in backbone_minimization_positions:
+            backbone_minimization_vector[int(minimization_position)] = True
+        sidechain_minimization_positions = minimization_positions - no_minimizing_sidechain_positions
+        sidechain_minimization_vector = vector1_bool(assembly_length)
+        for minimization_position in sidechain_minimization_positions:
+            sidechain_minimization_vector[int(minimization_position)] = True
         move_map = MoveMap()
-        move_map.set_bb(minimization_vector)
-        move_map.set_chi(minimization_vector)
+        move_map.set_bb(backbone_minimization_vector)
+        move_map.set_chi(sidechain_minimization_vector)
         for jump_edge in jump_edges:
             move_map.set_jump(jump_edge, True)
     else: # Create a movemap factory using residue and jump selectors.
-        minimization_selection = AndResidueSelector(minimization_selection, \
-                NotResidueSelector(ResidueIndexSelector(",".join(no_minimizing_positions) + ",")))
+        backbone_minimization_selection = AndResidueSelector(minimization_selection, \
+                NotResidueSelector(ResidueIndexSelector(",".join(no_minimizing_backbone_positions) + ",")))
+        sidechain_minimization_selection = AndResidueSelector(minimization_selection, \
+                NotResidueSelector(ResidueIndexSelector(",".join(no_minimizing_sidechain_positions) + ",")))
         move_map = MoveMapFactory()
-        move_map.add_bb_action(move_map_action.mm_enable, minimization_selection)
-        move_map.add_chi_action(move_map_action.mm_enable, minimization_selection)
+        move_map.add_bb_action(move_map_action.mm_enable, backbone_minimization_selection)
+        move_map.add_chi_action(move_map_action.mm_enable, sidechain_minimization_selection)
         for jump_edge in jump_edges:
             move_map.add_jump_action(move_map_action.mm_enable, JumpIndexSelector(jump_edge))
     return move_map
@@ -1158,10 +1170,21 @@ def main(args):
     if args.no_packing_residue_identities:
         no_packing_pose_indices.update(residue_name3_selector(pose, \
                 args.no_packing_residue_identities, sequence_length=sequence_length))
-    no_minimizing_pose_indices, _ = pdb_to_pose_numbering(pose, args.no_minimizing_residues)
-    if args.no_minimizing_residue_identities:
-        no_minimizing_pose_indices.update(residue_name3_selector(pose, \
-                args.no_minimizing_residue_identities, sequence_length=sequence_length))
+    no_minimizing_backbone_pose_indices, _ = pdb_to_pose_numbering(pose, \
+            args.no_minimizing_backbone_residues)
+    if args.no_minimizing_backbone_residue_identities:
+        no_minimizing_backbone_pose_indices.update(residue_name3_selector(pose, \
+                args.no_minimizing_backbone_residue_identities, sequence_length=sequence_length))
+    no_minimizing_sidechain_pose_indices, _ = pdb_to_pose_numbering(pose, \
+            args.no_minimizing_sidechain_residues)
+    if args.no_minimizing_sidechain_residue_identities:
+        no_minimizing_sidechain_pose_indices.update(residue_name3_selector(pose, \
+                args.no_minimizing_sidechain_residue_identities, sequence_length=sequence_length))
+    no_minimizing_jump_edge_pose_indices, _ = pdb_to_pose_numbering(pose, \
+            args.no_minimizing_jump_edge_residues)
+    if args.no_minimizing_jump_edge_residue_identities:
+        no_minimizing_jump_edge_pose_indices.update(residue_name3_selector(pose, \
+                args.no_minimizing_jump_edge_residue_identities, sequence_length=sequence_length))
     pre_mutations, _ = pdb_to_pose_numbering(pose, args.pre_mutations)
     mutations, _ = pdb_to_pose_numbering(pose, args.mutations)
     mutations = mutations - pre_mutations
@@ -1228,10 +1251,10 @@ def main(args):
     # Exclude index_ref_pose redundant positions and no minimizing positions.
     pre_minimization_pose_indices = set(filter(lambda index: int(index) \
             <= sequence_length, theozyme_pose_indices.union(enzdes_pose_indices)))
-    pre_minimization_pose_indices = pre_minimization_pose_indices - no_minimizing_pose_indices
+    pre_minimization_pose_indices = pre_minimization_pose_indices - no_minimizing_sidechain_pose_indices
     rigid_body_tform_pose_indices = set(filter(lambda index: int(index) \
             <= sequence_length, rigid_body_tform_pose_indices))
-    rigid_body_tform_pose_indices = rigid_body_tform_pose_indices - no_minimizing_pose_indices
+    rigid_body_tform_pose_indices = rigid_body_tform_pose_indices - no_minimizing_jump_edge_pose_indices
     # Rigid body transformations.
     rigid_body_tform_jump_edges = set()
     if len(rigid_body_tform_pose_indices) > 0:
@@ -1330,7 +1353,9 @@ def main(args):
     else: # Minimize the whole pose.
         min_shell_focus_selection = TrueResidueSelector()
     move_map = create_move_map(min_shell_focus_selection, \
-            no_minimizing_positions=no_minimizing_pose_indices, index_ref_pose=index_ref_pose, \
+            no_minimizing_backbone_positions=no_minimizing_backbone_pose_indices, \
+            no_minimizing_sidechain_positions=no_minimizing_sidechain_pose_indices, \
+            index_ref_pose=index_ref_pose, \
             n_monomers=n_monomers, sequence_length=sequence_length, \
             assembly_length=assembly_length, jump_edges=rigid_body_tform_jump_edges)
     # Create the fast relax mover.
