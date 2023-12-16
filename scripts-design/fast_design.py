@@ -755,11 +755,15 @@ def create_move_map(focus_selection, no_minimizing_backbone_positions:set=set(),
     else: # Create a movemap factory using residue and jump selectors.
         backbone_minimization_selection = AndResidueSelector(minimization_selection, \
                 NotResidueSelector(ResidueIndexSelector(",".join(no_minimizing_backbone_positions) + ",")))
+        no_backbone_minimization_selection = NotResidueSelector(backbone_minimization_selection)
         sidechain_minimization_selection = AndResidueSelector(minimization_selection, \
                 NotResidueSelector(ResidueIndexSelector(",".join(no_minimizing_sidechain_positions) + ",")))
+        no_sidechain_minimization_selection = NotResidueSelector(sidechain_minimization_selection)
         move_map = MoveMapFactory()
         move_map.add_bb_action(move_map_action.mm_enable, backbone_minimization_selection)
+        move_map.add_bb_action(move_map_action.mm_disable, no_backbone_minimization_selection)
         move_map.add_chi_action(move_map_action.mm_enable, sidechain_minimization_selection)
+        move_map.add_chi_action(move_map_action.mm_disable, no_sidechain_minimization_selection)
         for jump_edge in jump_edges:
             move_map.add_jump_action(move_map_action.mm_enable, JumpIndexSelector(jump_edge))
     return move_map
