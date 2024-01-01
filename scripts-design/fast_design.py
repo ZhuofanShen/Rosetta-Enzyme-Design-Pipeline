@@ -67,7 +67,7 @@ def parse_arguments():
     parser.add_argument("-edges", "--alter_jump_edges", type=str, nargs="*", help=\
             "[$edge,$atom1,$atom2] or [$edge,$upstream_edge] or [$edge,$upstream_edge,$atom1,$atom2] * n")
     parser.add_argument("-chis", "--chi_dihedrals", type=str, nargs="*", default=list(), \
-            help="$chain$residue_index,$chi,$degree or $residue_name3,$chi,$degree")
+            help="$chain$residue_index,$chi,$degree(s) or $residue_name3,$chi,$degree(s)")
     parser.add_argument("-coord_cst_sd", "--coordinate_constraints_standard_deviation", type=float)
     parser.add_argument("-bounded_coord_cst", "--bounded_coordinate_constraints", type=float)
     parser.add_argument("-ca_coord_cst", "--only_CA_coordinate_constraints", action="store_true")
@@ -332,9 +332,13 @@ def alter_fold_tree_jump_edges(fold_tree, alter_jump_edges):
         edge_strings.append(",".join(edge_info))
     return create_fold_tree(edge_strings)
 
-def set_chi_dihedral(pose, chi_dihedrals):
+def set_chi_dihedral(pose, chi_dihedrals, ith_trajectory:int=1):
     for chi in chi_dihedrals:
-        residue_info, chi_index, dihedral_value = chi.split(",")
+        chi_split = chi.split(",")
+        residue_info, chi_index = chi_split[:2]
+        dihedral_values = chi_split[2:]
+        n_dihedral_values = len(dihedral_values)
+        dihedral_value = dihedral_values[(ith_trajectory - 1) % n_dihedral_values]
         try:
             chi_residue_pose_indices, _ = pdb_to_pose_numbering(pose, [residue_info])
         except:
@@ -797,8 +801,8 @@ def create_fast_relax_mover(score_function, task_factory, move_map=None):
         fast_relax.set_movemap_factory(move_map)
     return fast_relax
 
-def load_pdb_as_pose(score_function, pdb:str, pre_mutators, fold_tree, chi_dihedrals:list, \
-        symmetry:str, membrane_span_file:str, constraint_file:str, geometry_constraints, \
+def load_pdb_as_pose(score_function, pdb:str, pre_mutators, fold_tree, symmetry:str, \
+        membrane_span_file:str, constraint_file:str, geometry_constraints, \
         constraints, favor_native_residue):
     # Load pdb as pose.
     pose = pose_from_pdb(pdb)
@@ -806,7 +810,6 @@ def load_pdb_as_pose(score_function, pdb:str, pre_mutators, fold_tree, chi_dihed
         pre_mutator.apply(pose)
     if fold_tree:
         pose.fold_tree(fold_tree)
-    set_chi_dihedral(pose, chi_dihedrals)
     # Apply symmetry if specified.
     apply_symmetry_membrane(symmetry, membrane_span_file, pose)
     # Read constraint files from the command line and apply to pose.
@@ -1026,11 +1029,12 @@ def run_job(score_function, pose, pre_mutators, fold_tree, chi_dihedrals:list, \
                 p_pdb.writelines(cloud_pdb_lines[0])
                 p_pdb.writelines(rotamer_lines)
             pose_copy = load_pdb_as_pose(score_function, tmp_pdb, pre_mutators, \
-                    fold_tree, chi_dihedrals, symmetry, membrane_span_file, \
-                    constraint_file, geometry_constraints, constraints, favor_native_residue)
+                    fold_tree, symmetry, membrane_span_file, constraint_file, \
+                    geometry_constraints, constraints, favor_native_residue)
             os.remove(tmp_pdb)
         else:
             pose_copy = Pose(pose)
+        set_chi_dihedral(pose_copy, chi_dihedrals, ith_trajectory=i_decoy)
         for mover in movers:
             mover.apply(pose_copy)
         mutated_sequence = pose_copy.sequence()
@@ -1106,8 +1110,10 @@ def run_job_distributor(score_function, pose, pre_mutators, fold_tree, chi_dihed
         output_filename_prefix = os.path.basename(pose.pdb_info().name())\
                 .rstrip(".pdb").rstrip(".tmp") + "_relaxed"
     job_distributor = PyJobDistributor(output_filename_prefix, n_decoys, score_function)
+    i_decoy = 0
     while not job_distributor.job_complete:
-        i_decoy = job_distributor.current_id
+        i_decoy += 1
+        current_id = job_distributor.current_id
         if cloud_pdb_lines:
             if len(cloud_pdb_lines) > 2:
                 rotamer_index = np.random.randint(1, len(cloud_pdb_lines) - 1)
@@ -1117,16 +1123,17 @@ def run_job_distributor(score_function, pose, pre_mutators, fold_tree, chi_dihed
                 break
             rotamer_lines = cloud_pdb_lines[rotamer_index]
             del cloud_pdb_lines[rotamer_index]
-            tmp_pdb = output_filename_prefix + "." + str(i_decoy) + "_tmp.pdb"
+            tmp_pdb = output_filename_prefix + "." + str(current_id) + "_tmp.pdb"
             with open(tmp_pdb, "w") as p_pdb:
                 p_pdb.writelines(cloud_pdb_lines[0])
                 p_pdb.writelines(rotamer_lines)
             pose_copy = load_pdb_as_pose(score_function, tmp_pdb, pre_mutators, \
-                    fold_tree, chi_dihedrals, symmetry, membrane_span_file, \
-                    constraint_file, geometry_constraints, constraints, favor_native_residue)
+                    fold_tree, symmetry, membrane_span_file, constraint_file, \
+                    geometry_constraints, constraints, favor_native_residue)
             os.remove(tmp_pdb)
         else:
             pose_copy = Pose(pose)
+        set_chi_dihedral(pose_copy, chi_dihedrals, ith_trajectory=i_decoy)
         for mover in movers:
             mover.apply(pose_copy)
         job_distributor.output_decoy(pose_copy)
@@ -1137,8 +1144,8 @@ def run_job_distributor(score_function, pose, pre_mutators, fold_tree, chi_dihed
             aa = mutated_sequence[index]
             if aa != wt_aa:
                 suffix += "_" + wt_aa + pdb_info.pose2pdb(index + 1).split(" ")[0] + aa
-        os.rename(job_distributor.pdb_name + "_" + str(i_decoy) + ".pdb", \
-                job_distributor.pdb_name + suffix + "_" + str(i_decoy) + ".pdb")
+        os.rename(job_distributor.pdb_name + "_" + str(current_id) + ".pdb", \
+                job_distributor.pdb_name + suffix + "_" + str(current_id) + ".pdb")
 
 def main(args):
     # Create the score function.
@@ -1224,10 +1231,10 @@ def main(args):
     else:
         res_name3_ref_pose = pose
         enzdes_ref_pdb = args.pdb
-    rigid_body_tform_pose_indices = set()
     # Get substrates and catalytic residues pose indices.
     # Theozyme_pose_indices will include index_ref_pose redundant positions.
     theozyme_pose_indices = set()
+    rigid_body_tform_pose_indices = set()
     if args.catalytic_residues:
         catalytic_residue_pose_indices, _ = pdb_to_pose_numbering(pose, args.catalytic_residues)
         theozyme_pose_indices.update(catalytic_residue_pose_indices)
