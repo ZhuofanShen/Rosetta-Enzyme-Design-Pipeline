@@ -7,7 +7,7 @@ folds = ['GLOBIN', 'MYOGLOBIN', 'HEMOGLOBIN', 'DEHALOPEROXIDASE', 'ERYTHROCRUORI
     'HEME OXYGENASE', 'CYCLOOXYGENASE', 'DIOXYGENASE', 'PEROXYGENASE', 'PRNB', 'NITRIC OXIDE SYNTHASE', \
     'CYSTATHIONINE BETA-SYNTHASE', 'NITROPHORIN', 'DISMUTASE', 'DEHYDROGENASE', \
     'H-NOX', 'HEME-DEGRADING', 'HEMOPHORE', 'HEME TRANSFER PROTEIN', 'SENSOR DOMAIN', 'HMUT', 'HMOB', 'PROTEUS MIRABILIS CATALASE']
-for output_dir in ['HEM']:#, 'HEM_symm', 'HEM_asymm', 'HEM_noREMARK350']:
+for output_dir in ['HEM_monomer']:
     for pdb in os.listdir(output_dir):
         with open(output_dir + '/' + pdb + '/' + pdb + '.pdb', 'r') as pf:
             for line in pf:
