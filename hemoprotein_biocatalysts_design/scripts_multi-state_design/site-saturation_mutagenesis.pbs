@@ -1,0 +1,121 @@
+#!/bin/bash
+#SBATCH --partition=main           # Partition (job queue)
+#SBATCH --job-name monitoring      # Assign a name to the job
+#SBATCH --nodes=1                  # Number of nodes
+#SBATCH --ntasks=1                 # Number of tasks (usually = cores) on each node
+#SBATCH --mem=2000                 # Real memory required (MB)
+#SBATCH --time=3-00:00:00          # Total run time limit (HH:MM:SS)
+#SBATCH --output=slurm.%N.%j.out   # STDOUT output file
+#SBATCH --error=slurm.%N.%j.out    # STDERR output file
+#SBATCH --export=ALL               # Export you current env to the job env
+
+memory=2000
+variant=${1}
+protein=${variant%%"_"*}
+substrate_path="../../../../substrates/cyclopropanation_styrene_EDA"
+chain="A"
+# wt_sites=("25" "29" "32" "43" "61" "64" "65" "68" "69" "107")
+# wt_sites=("I29" "A64" "L68" "I108" "F43")
+wt_sites=("L68")
+# wt_sites=("I29" "T64" "I107" "F43")
+# wt_sites=("L87" "F96" "L101" "T185" "L244" "L247" "T252" "V295" "T297" "I395" "I396")
+# wt_sites=("F87" "F96" "L101" "L247")
+# wt_sites=("L87" "F96" "I101" "L247")
+# wt_sites=("A129" "F163" "F164" "V167" "R231" "L234" "G262" "S263" "A264" "G265" "T379")
+aas=("A" "G" "I" "L" "P" "V" "F" "W" "Y" "D" "E" "R" "H" "K" "S" "T" "C" "M" "N" "Q")
+configurations=("1R2R" "1S2S" "1R2S" "1S2R")
+carbenes=("rot1" "rot2" "rot3" "rot4")
+esters=("+" "-")
+n_decoys=5
+
+cd ${variant}
+for wt_site in ${wt_sites[@]}
+do
+    site=${wt_site:1}
+    for aa in ${aas[@]}
+    do
+        mkdir ${protein}
+        cd ${protein}
+        if [[ ! -f ${protein}.${wt_site}${aa}".pdb" ]]
+        then
+            while [ $(squeue -u zs251 | wc -l) -ge 500 ];
+            do
+                sleep 60;
+            done;
+            /usr/bin/sbatch << EOF
+#!/bin/bash
+#SBATCH --partition=main                 # Partition (job queue)
+#SBATCH --job-name apo${site}            # Assign a name to the job
+#SBATCH --nodes=1                        # Number of nodes
+#SBATCH --ntasks=1                       # Number of tasks (usually = cores) on each node
+#SBATCH --mem=${memory}                  # Real memory required (MB)
+#SBATCH --time=3-00:00:00                # Total run time limit (HH:MM:SS)
+#SBATCH --output=apo${site}.log          # STDOUT output file
+#SBATCH --error=apo${site}.err           # STDERR output file
+#SBATCH --export=ALL                     # Export you current env to the job env
+
+python ../../../../../../../enzdes_utils/fast_design.py \
+    ../input/${protein}.pdb -ref ../../../../${protein}_clean.pdb \
+    -index_ref ../../../complexes/${protein}_1X2X-rotn.pdb \
+    -params ../../${substrate_path}/RRT.params \
+    ../../${substrate_path}/SST.params \
+    ../../${substrate_path}/RST.params \
+    ../../${substrate_path}/SRT.params \
+    -sub_ids RRT SST RST SRT -no_pack_ids HEM -no_min_sc_ids HEM -no_min_je_ids HEM \
+    -muts ${chain}${site},${aa} -rpk_nbh -no_rpk_enzdes -min_nbh \
+    -n ${n_decoys} -save_n 1 -prefix ${protein}.${wt_site}${aa} \
+    --score_terms fa_intra_rep_nonprotein:0.545 fa_intra_atr_nonprotein:1
+EOF
+        fi
+        cd ..
+        for configuration in ${configurations[@]}
+        do
+            config=${configuration:1:1}${configuration:3:3}
+            for carbene in ${carbenes[@]}
+            do
+                for ester in ${esters[@]}
+                do
+                    protein_ts=${protein}"_"${configuration}"-"${carbene}${ester}
+                    mkdir ${protein_ts}
+                    cd ${protein_ts}
+                    if [[ ! -f ${protein_ts}.${wt_site}${aa}".pdb" ]]
+                    then
+                        while [ $(squeue -u zs251 | wc -l) -ge 500 ];
+                        do
+                            sleep 60;
+                        done;
+/usr/bin/sbatch << EOF
+#!/bin/bash
+#SBATCH --partition=main                 # Partition (job queue)
+#SBATCH --job-name ${config}${carbene: -1}${ester}${site}    # Assign a name to the job
+#SBATCH --nodes=1                        # Number of nodes
+#SBATCH --ntasks=1                       # Number of tasks (usually = cores) on each node
+#SBATCH --mem=${memory}                  # Real memory required (MB)
+#SBATCH --time=3-00:00:00                # Total run time limit (HH:MM:SS)
+#SBATCH --output=${config}${carbene: -1}${ester}${site}.log  # STDOUT output file
+#SBATCH --error=${config}${carbene: -1}${ester}${site}.err   # STDERR output file
+#SBATCH --export=ALL                     # Export you current env to the job env
+
+python ../../../../../../../enzdes_utils/fast_design.py \
+    ../input/${protein_ts}.pdb -ref ../../../../${protein}_clean.pdb \
+    -index_ref ../../../complexes/${protein}_1X2X-rotn.pdb \
+    -params ../../${substrate_path}/RRT.params \
+    ../../${substrate_path}/SST.params \
+    ../../${substrate_path}/RST.params \
+    ../../${substrate_path}/SRT.params \
+    -dihe_atoms ${config}T,N1 ${config}T,Fe ${config}T,CARB ${config}T,CEST ${config}T,OCAR ${config}T,CEST ${config}T,OEST ${config}T,CET1 ${config}T,CST1 ${config}T,CST2 ${config}T,CAR1 ${config}T,CAR2 \
+    -dihe_params 0,34.95 0,21.77 0,42.97 -edges [-1,-2,FE,N1] \
+    -enzdes_cst ../../${substrate_path}/HEM-TS-${configuration}.cst \
+    -sub_ids RRT SST RST SRT -no_pack_ids HEM -no_min_sc_ids HEM -no_min_je_ids HEM RRT SST SRT RST \
+    -muts ${chain}${site},${aa} -rpk_nbh -no_rpk_enzdes -min_nbh \
+    -n ${n_decoys} -save_n 1 -prefix ${protein_ts}.${wt_site}${aa} \
+    --score_terms fa_intra_rep_nonprotein:0.545 fa_intra_atr_nonprotein:1
+EOF
+                    fi
+                    cd ..
+                done
+            done
+        done
+    done
+done
+cd ..
