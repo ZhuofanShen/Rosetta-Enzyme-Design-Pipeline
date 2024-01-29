@@ -1,0 +1,81 @@
+HETATM    1 Fe   SST X   1      35.334   4.495  10.175  1.00  0.00           X  
+HETATM    2  N1  SST X   1      33.551   4.384  11.142  1.00  0.00           X  
+HETATM    3  N2  SST X   1      36.146   3.191  11.518  1.00  0.00           X  
+HETATM    4  N3  SST X   1      37.079   4.477   9.142  1.00  0.00           X  
+HETATM    5  N4  SST X   1      34.474   5.611   8.743  1.00  0.00           X  
+HETATM    6 CARB SST X   1      35.978   5.812  11.340  1.00  0.00           C  
+HETATM    7 HARB SST X   1      37.044   5.750  11.569  1.00  0.00           H  
+HETATM    8 CEST SST X   1      35.213   6.353  12.509  1.00  0.00           C  
+HETATM    9 OCAR SST X   1      34.318   7.181  12.490  1.00  0.00           O  
+HETATM   10 OEST SST X   1      35.637   5.765  13.654  1.00  0.00           O  
+HETATM   11 CET1 SST X   1      34.878   6.063  14.850  1.00  0.00           C  
+HETATM   12 HE1A SST X   1      34.905   7.143  15.024  1.00  0.00           H  
+HETATM   13 HE1B SST X   1      33.836   5.772  14.682  1.00  0.00           H  
+HETATM   14 CET2 SST X   1      35.505   5.288  15.994  1.00  0.00           C  
+HETATM   15 HE2A SST X   1      36.547   5.587  16.146  1.00  0.00           H  
+HETATM   16 HE2B SST X   1      34.952   5.483  16.919  1.00  0.00           H  
+HETATM   17 HE2C SST X   1      35.478   4.212  15.794  1.00  0.00           H  
+HETATM   18 CST1 SST X   1      36.279   7.769  10.220  1.00  0.00           C  
+HETATM   19 HS1A SST X   1      36.727   7.308   9.351  1.00  0.00           H  
+HETATM   20 HS1B SST X   1      35.208   7.922  10.190  1.00  0.00           H  
+HETATM   21 CST2 SST X   1      37.028   8.400  11.168  1.00  0.00           C  
+HETATM   22  HS2 SST X   1      36.497   8.919  11.965  1.00  0.00           H  
+HETATM   23 CAR1 SST X   1      38.483   8.424  11.278  1.00  0.00           C  
+HETATM   24 CAR2 SST X   1      39.336   7.758  10.371  1.00  0.00           C  
+HETATM   25 HAR2 SST X   1      38.917   7.190   9.546  1.00  0.00           H  
+HETATM   26 CAR3 SST X   1      39.070   9.144  12.339  1.00  0.00           C  
+HETATM   27 HAR3 SST X   1      38.426   9.659  13.047  1.00  0.00           H  
+HETATM   28 CAR4 SST X   1      40.718   7.818  10.523  1.00  0.00           C  
+HETATM   29 HAR4 SST X   1      41.358   7.297   9.817  1.00  0.00           H  
+HETATM   30 CAR5 SST X   1      40.454   9.207  12.486  1.00  0.00           C  
+HETATM   31 HAR5 SST X   1      40.885   9.770  13.309  1.00  0.00           H  
+HETATM   32 CAR6 SST X   1      41.284   8.543  11.579  1.00  0.00           C  
+HETATM   33 HAR6 SST X   1      42.364   8.588  11.692  1.00  0.00           H  
+CONECT    1    2    3    4    5
+CONECT    1    6
+CONECT    2    1
+CONECT    3    1
+CONECT    4    1
+CONECT    5    1
+CONECT    6    1    7    8   18
+CONECT    6   21
+CONECT    7    6
+CONECT    8    6    9    9   10
+CONECT    9    8    8
+CONECT   10    8   11
+CONECT   11   10   12   13   14
+CONECT   12   11
+CONECT   13   11
+CONECT   14   11   15   16   17
+CONECT   15   14
+CONECT   16   14
+CONECT   17   14
+CONECT   18    6   19   20   21
+CONECT   19   18
+CONECT   20   18
+CONECT   21    6   18   22   23
+CONECT   22   21
+CONECT   23   21   24   24   24
+CONECT   23   24   26   26   26
+CONECT   23   26
+CONECT   24   23   23   23   23
+CONECT   24   25   28   28   28
+CONECT   24   28
+CONECT   25   24
+CONECT   26   23   23   23   23
+CONECT   26   27   30   30   30
+CONECT   26   30
+CONECT   27   26
+CONECT   28   24   24   24   24
+CONECT   28   29   32   32   32
+CONECT   28   32
+CONECT   29   28
+CONECT   30   26   26   26   26
+CONECT   30   31   32   32   32
+CONECT   30   32
+CONECT   31   30
+CONECT   32   28   28   28   28
+CONECT   32   30   30   30   30
+CONECT   32   33
+CONECT   33   32
+END

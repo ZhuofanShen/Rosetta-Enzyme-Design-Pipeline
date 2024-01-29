@@ -1,0 +1,9 @@
+CST::BEGIN
+  TEMPLATE::  ATOM_MAP: 1 atom_name: CARB CEST OEST
+  TEMPLATE::  ATOM_MAP: 1 residue3: RST
+
+  TEMPLATE::  ATOM_MAP: 2 atom_name: FE NA C1A
+  TEMPLATE::  ATOM_MAP: 2 residue3: HEM
+
+  CONSTRAINT::  distanceAB: 1.88     1.00   0.01     1      0
+CST::END
