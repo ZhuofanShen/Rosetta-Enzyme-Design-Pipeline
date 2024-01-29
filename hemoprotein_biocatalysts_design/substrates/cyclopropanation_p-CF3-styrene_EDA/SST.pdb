@@ -1,0 +1,87 @@
+HETATM    1  N1  SST X   1      -2.054   1.095  -0.715  1.00  0.00           X  
+HETATM    2  N4  SST X   1      -1.067  -1.422  -1.606  1.00  0.00           X  
+HETATM    3  N3  SST X   1       0.331  -1.775   0.872  1.00  0.00           X  
+HETATM    4  N2  SST X   1      -0.699   0.724   1.798  1.00  0.00           X  
+HETATM    5 Fe   SST X   1      -0.802  -0.312   0.044  1.00  0.00           X  
+HETATM    6 CARB SST X   1       0.731   0.698  -0.410  1.00  0.00           C  
+HETATM    7 HARB SST X   1       1.548   0.645   0.309  1.00  0.00           H  
+HETATM    8 CEST SST X   1       0.688   2.053  -1.049  1.00  0.00           C  
+HETATM    9 OCAR SST X   1       0.504   2.305  -2.221  1.00  0.00           O  
+HETATM   10 OEST SST X   1       0.874   3.014  -0.116  1.00  0.00           O  
+HETATM   11 CET1 SST X   1       0.729   4.389  -0.556  1.00  0.00           C  
+HETATM   12 HE1A SST X   1       1.407   4.561  -1.394  1.00  0.00           H  
+HETATM   13 HE1B SST X   1      -0.294   4.533  -0.912  1.00  0.00           H  
+HETATM   14 CET2 SST X   1       1.048   5.284   0.623  1.00  0.00           C  
+HETATM   15 HE2A SST X   1       2.070   5.118   0.973  1.00  0.00           H  
+HETATM   16 HE2B SST X   1       0.953   6.331   0.326  1.00  0.00           H  
+HETATM   17 HE2C SST X   1       0.363   5.098   1.453  1.00  0.00           H  
+HETATM   18 CST1 SST X   1       1.871  -0.392  -1.972  1.00  0.00           C  
+HETATM   19 HS1A SST X   1       1.774  -1.367  -1.520  1.00  0.00           H  
+HETATM   20 HS1B SST X   1       1.132  -0.125  -2.712  1.00  0.00           H  
+HETATM   21 CST2 SST X   1       3.025   0.326  -1.882  1.00  0.00           C  
+HETATM   22  HS2 SST X   1       3.089   1.252  -2.445  1.00  0.00           H  
+HETATM   23 CAR1 SST X   1       4.192   0.015  -1.066  1.00  0.00           C  
+HETATM   24 CAR2 SST X   1       4.268  -1.118  -0.231  1.00  0.00           C  
+HETATM   25 CAR4 SST X   1       5.405  -1.372   0.518  1.00  0.00           C  
+HETATM   26 CAR6 SST X   1       6.499  -0.503   0.450  1.00  0.00           C  
+HETATM   27 CAR5 SST X   1       6.445   0.625  -0.368  1.00  0.00           C  
+HETATM   28 CAR3 SST X   1       5.301   0.878  -1.114  1.00  0.00           C  
+HETATM   29 HAR2 SST X   1       3.433  -1.804  -0.163  1.00  0.00           H  
+HETATM   30 HAR4 SST X   1       5.448  -2.249   1.151  1.00  0.00           H  
+HETATM   31 HAR5 SST X   1       7.291   1.297  -0.423  1.00  0.00           H  
+HETATM   32 HAR3 SST X   1       5.263   1.756  -1.750  1.00  0.00           H  
+HETATM   33  CTF SST X   1       7.705  -0.767   1.303  1.00  0.00           C  
+HETATM   34  F1  SST X   1       7.531  -0.327   2.576  1.00  0.00           F  
+HETATM   35  F2  SST X   1       8.815  -0.155   0.834  1.00  0.00           F  
+HETATM   36  F3  SST X   1       7.987  -2.087   1.395  1.00  0.00           F  
+CONECT    1    5
+CONECT    2    5
+CONECT    3    5
+CONECT    4    5
+CONECT    5    1    2    3    4
+CONECT    5    6
+CONECT    6    5    7    8   18
+CONECT    6   21
+CONECT    7    6
+CONECT    8    6    9    9   10
+CONECT    9    8    8
+CONECT   10    8   11
+CONECT   11   10   12   13   14
+CONECT   12   11
+CONECT   13   11
+CONECT   14   11   15   16   17
+CONECT   15   14
+CONECT   16   14
+CONECT   17   14
+CONECT   18    6   19   20   21
+CONECT   19   18
+CONECT   20   18
+CONECT   21    6   18   22   23
+CONECT   22   21
+CONECT   23   21   24   24   24
+CONECT   23   24   28   28   28
+CONECT   23   28
+CONECT   24   23   23   23   23
+CONECT   24   25   25   25   25
+CONECT   24   29
+CONECT   25   24   24   24   24
+CONECT   25   26   26   26   26
+CONECT   25   30
+CONECT   26   25   25   25   25
+CONECT   26   33   27   27   27
+CONECT   26   27
+CONECT   27   26   26   26   26
+CONECT   27   31   28   28   28
+CONECT   27   28
+CONECT   28   23   23   23   23
+CONECT   28   27   27   27   27
+CONECT   28   32
+CONECT   29   24
+CONECT   30   25
+CONECT   31   27
+CONECT   32   28
+CONECT   33   26   34   35   36
+CONECT   34   33
+CONECT   35   33
+CONECT   36   33
+END
