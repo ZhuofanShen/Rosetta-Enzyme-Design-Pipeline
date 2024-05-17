@@ -121,9 +121,9 @@ for pdb in filter(lambda x: x.endswith('.pdb'), os.listdir(args.input_files)):
                                 proximal_atom_heme_dihedral = 'invalid'
                                 break
                             if proximal_atom_heme_dihedral > 0:
-                                position = 'BELOW'
+                                position = 'PROXIMAL'
                             else:
-                                position = 'ABOVE'
+                                position = 'DISTAL'
                             proximal_residues[line[13:16] + line[17] + line[18:22].strip(' ')] = \
                                     (line[13:16], line[17], line[18:22].strip(' '), line[24:28].strip(' '), position)
                         else:
