@@ -1,13 +1,13 @@
 import argparse
 import os
 from pymol import *
-import shutil
 import traceback
 
 parser = argparse.ArgumentParser()
 parser.add_argument("directory", type=str)
 parser.add_argument("-f", "--fold", type=str)
 parser.add_argument("-sub", "--substrate_path", type=str, default="substrates/cyclopropanation_styrene_EDA")
+parser.add_argument("-iso", "--isomers", type=str, nargs="*", default=["RRT", "SST", "RST", "SRT"])
 args = parser.parse_args()
 
 dir = args.directory
@@ -73,13 +73,11 @@ for pdb in filter(lambda x: os.path.isfile(os.path.join(dir, x, x + "_relaxed.pd
                     with open(os.path.join(pdb_sub_path, another_proximal_res[0]), "w") as _:
                         pass
             cmd.load(os.path.join(dir, pdb, pdb + "_relaxed.pdb"), pdb)
-            cmd.load(os.path.join(substrate_path, "RRT.pdb"))
-            cmd.load(os.path.join(substrate_path, "SST.pdb"))
-            cmd.load(os.path.join(substrate_path, "RST.pdb"))
-            cmd.load(os.path.join(substrate_path, "SRT.pdb"))
+            for stereo in args.isomers:
+                cmd.load(os.path.join(substrate_path, stereo + "T.pdb"))
             ddG_ref_pdb_string = pdb
             pdb_index = 0
-            for stereo in ["RRT", "SST", "RST", "SRT"]:
+            for stereo in args.isomers:
                 for rot in range(4):
                     pdb_index += 1
                     obj = stereo + str(pdb_index)
@@ -121,7 +119,7 @@ for pdb in filter(lambda x: os.path.isfile(os.path.join(dir, x, x + "_relaxed.pd
                     ppdb.writelines(pdb_lines)
                     ppdb.truncate()
             pdb_index = -1
-            for stereo in ["RRT", "SST", "RST", "SRT"]:
+            for stereo in args.isomers:
                 for rot in range(4):
                     pdb_index += 2
                     obj = stereo + str(pdb_index)
