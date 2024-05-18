@@ -61,7 +61,7 @@ python ../../../../../../../enzdes_utils/fast_design.py \
     ../../${substrate_path}/SST.params \
     ../../${substrate_path}/RST.params \
     ../../${substrate_path}/SRT.params \
-    -sub_ids RRT SST RST SRT -no_pack_ids HEM -no_min_sc_ids HEM -no_min_je_ids HEM \
+    -sub_ids RRT SST RST SRT -no_min_sc_ids HEM -no_min_je_ids HEM \
     -muts ${chain}${site},${aa} -rpk_nbh -no_rpk_enzdes -min_nbh \
     -n ${n_decoys} -save_n 1 -prefix ${protein}.${wt_site}${aa} \
     --score_terms fa_intra_rep_nonprotein:0.545 fa_intra_atr_nonprotein:1
@@ -106,7 +106,7 @@ python ../../../../../../../enzdes_utils/fast_design.py \
     -dihe_atoms ${config}T,N1 ${config}T,Fe ${config}T,CARB ${config}T,CEST ${config}T,OCAR ${config}T,CEST ${config}T,OEST ${config}T,CET1 ${config}T,CST1 ${config}T,CST2 ${config}T,CAR1 ${config}T,CAR2 \
     -dihe_params 0,34.95 0,21.77 0,42.97 -edges [-1,-2,FE,N1] \
     -enzdes_cst ../../${substrate_path}/HEM-TS-${configuration}.cst \
-    -sub_ids RRT SST RST SRT -no_pack_ids HEM -no_min_sc_ids HEM -no_min_je_ids HEM RRT SST SRT RST \
+    -sub_ids RRT SST RST SRT -no_min_sc_ids HEM -no_min_je_ids HEM RRT SST SRT RST \
     -muts ${chain}${site},${aa} -rpk_nbh -no_rpk_enzdes -min_nbh \
     -n ${n_decoys} -save_n 1 -prefix ${protein_ts}.${wt_site}${aa} \
     --score_terms fa_intra_rep_nonprotein:0.545 fa_intra_atr_nonprotein:1
