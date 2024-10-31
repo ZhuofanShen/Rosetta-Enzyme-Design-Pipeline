@@ -1,3 +1,0 @@
--extra_res_fa ../../../../ligands/pCaaF/pCaaF-product/CAF_ligand.params ../../../../ligands/pCaaF/pCaaF-product/TYZ.params ../../../../ligands/pCaaF/pCaaF-product/CYX.params
--match:lig_name CAF
--match:geometric_constraint_file ../../../../ligands/pCaaF/pCaaF-product/pCaaF-product.cst
