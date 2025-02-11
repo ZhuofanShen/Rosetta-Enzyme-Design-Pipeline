@@ -1,0 +1,3 @@
+-extra_res_fa ../../../../ligands/O2beY-GLU/OBY.params ../../../../ligands/O2beY-GLU/TYZ.params ../../../../ligands/O2beY-GLU/GLX.params
+-match:lig_name OBY
+-match:geometric_constraint_file  ../../../../ligands/O2beY-GLU/O2beY-GLU.cst
