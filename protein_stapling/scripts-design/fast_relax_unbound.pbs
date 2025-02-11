@@ -1,0 +1,208 @@
+#!/bin/bash
+#SBATCH --partition=main           # Partition (job queue)
+#SBATCH --job-name relax           # Assign a name to the job
+#SBATCH --nodes=1                  # Number of nodes
+#SBATCH --ntasks=1                 # Number of tasks (usually = cores) on each node
+#SBATCH --mem=200                  # Real memory required (MB)
+#SBATCH --time=3-00:00:00          # Total run time limit (HH:MM:SS)
+#SBATCH --output=slurm.%N.%j.out   # STDOUT output file
+#SBATCH --error=slurm.%N.%j.out    # STDERR output file
+#SBATCH --export=ALL               # Export you current env to the job env
+
+while (( $# > 1 ))
+do
+    case $1 in
+        # -pr) protein_database="$2";; # i.e. proteins
+        -nchains) n_chains="$2";; # i.e. 1 or 2
+        -pos) position_file_wildcard="$2";; # i.e. *_F*_C*, optional
+        -lig) ligand_path="$2";; # i.e. ligands/O2beY-CYS
+        -dup) duplicated="$2";; # optional
+        -n) decoys="$2";; # optional
+        -mem) memory="$2";; # optional
+        *) break;
+    esac
+    shift 2
+done
+
+if ! [ -z "${position_file_wildcard}" ]
+then
+    position_file_wildcard=*"_"*"_"*
+fi
+
+if [ -z "${duplicated}" ]
+then
+    enzdes_cst_suffix=_Relax.cst
+else
+    enzdes_cst_suffix=_duplicated.cst
+fi
+
+if ! [ -z "${decoys}" ]
+then
+    decoys="-n "${decoys}
+else
+    decoys="-n 100"
+fi
+
+if [ -z "${memory}" ]
+then
+    memory="2000"
+fi
+
+params_files="-params"
+for params_file in `ls ${ligand_path}/*.params`
+do
+    params_files=${params_files}" ../../../../"${params_file}
+done
+
+ligand=${ligand_path##*/}
+
+# improper dihedral 1
+dihe_atoms="-dihe_atoms OBY,O1 OBY,C1 OBY,C2 TYZ,OH"
+dihe_params="-dihe_params 0,1"
+
+case ${ligand_path##*-} in
+    ASP)
+        nucleophile_name3=ASX
+        # improper dihedral 2
+        improper2=" OBY,S1 OBY,C2 OBY,C1 ASX,OD2"
+        
+        # dihedral 2 AB
+        dihe_atoms=${dihe_atoms}" OBY,C1 OBY,C2 ASX,OD2 ASX,CG"
+        dihe_params=${dihe_params}" 180,59,80,35,280,35" # " 180,59,85,35,275,35" 59 stabilize Y32E55; 42 destabilize M104E164
+        # dihedral 2 B
+        dihe_atoms=${dihe_atoms}" OBY,C2 ASX,OD2 ASX,CG ASX,CB"
+        dihe_params=${dihe_params}" 180,20"
+        ;;
+    GLU)
+        nucleophile_name3=GLX
+        # improper dihedral 2
+        improper2=" OBY,S1 OBY,C2 OBY,C1 GLX,OE2"
+        # dihedral 2 AB
+        dihe_atoms=${dihe_atoms}" OBY,C1 OBY,C2 GLX,OE2 GLX,CD"
+        dihe_params=${dihe_params}" 180,59,80,35,280,35" # " 180,59,85,35,275,35" 59 stabilize Y32E55; 42 destabilize M104E164
+        # dihedral 2 B
+        dihe_atoms=${dihe_atoms}" OBY,C2 GLX,OE2 GLX,CD GLX,CG"
+        dihe_params=${dihe_params}" 180,20"
+        ;;
+    CYS)
+        nucleophile_name3=CYX
+        # improper dihedral 2
+        improper2=" OBY,S1 OBY,C2 OBY,C1 CYX,SG"
+        # dihedral 2 AB
+        dihe_atoms=${dihe_atoms}" OBY,C1 OBY,C2 CYX,SG CYX,CB"
+        dihe_params=${dihe_params}" 180,42,70,33,290,33"
+        # dihedral 2 B
+        dihe_atoms=${dihe_atoms}" OBY,C2 CYX,SG CYX,CB CYX,CA"
+        dihe_params=${dihe_params}" 180,42,70,33,290,33"
+        ;;
+    HIS)
+        nucleophile_name3=HIX
+        # improper dihedral 2
+        improper2=" OBY,S1 OBY,C2 OBY,C1 HIX,NE2"
+        # # dihedral 2 AB
+        # dihe_atoms=${dihe_atoms}" OBY,C1 OBY,C2 HIX,NE2 HIX,CD2"
+        # dihe_params=${dihe_params}" 90,58,270,58"
+        # dihedral 2 B
+        dihe_atoms=${dihe_atoms}" OBY,C2 HIX,NE2 HIX,CD2 HIX,CG"
+        dihe_params=${dihe_params}" 180,1"
+        ;;
+    LYS)
+        nucleophile_name3=LYX
+        # improper dihedral 2
+        improper2=" OBY,S1 OBY,C2 OBY,C1 LYX,NZ"
+        # improper dihedral lysine
+        dihe_atoms=${dihe_atoms}" OBY,C2 LYX,CE LYX,NZ LYX,3HZ"
+        dihe_params=${dihe_params}" 0,1"
+        # dihedral 2 AB
+        dihe_atoms=${dihe_atoms}" OBY,C1 OBY,C2 LYX,NZ LYX,CE"
+        dihe_params=${dihe_params}" 180,36,60,33,300,33" # tried 35,29 170.308035        ddG  7l6v_M104UAA_K166
+        # dihedral 2 B
+        dihe_atoms=${dihe_atoms}" OBY,C2 LYX,NZ LYX,CE LYX,CD"
+        dihe_params=${dihe_params}" 180,36,60,33,300,33" # tried 35,29 170.308035        ddG  7l6v_M104UAA_K166
+        ;;
+esac
+
+# improper dihedral 2
+dihe_atoms=${dihe_atoms}${improper2}
+dihe_params=${dihe_params}" 0,1"
+# dihedral 1/2 A
+dihe_atoms=${dihe_atoms}" OBY,O1 OBY,C1 OBY,C2 OBY,S1"
+dihe_params=${dihe_params}" 180,37,70,33,290,33" # " 180,37,70,25,290,25"
+# dihedral 1 B
+dihe_atoms=${dihe_atoms}" OBY,C1 TYZ,OH TYZ,CZ TYZ,CE1"
+dihe_params=${dihe_params}" 0,50,180,50"
+# dihedral 1 AB
+dihe_atoms=${dihe_atoms}" OBY,C2 OBY,C1 TYZ,OH TYZ,CZ"
+dihe_params=${dihe_params}" 180,36,70,33,290,33" # " 180,36,80,33,280,33" 80 destabilize Y106E55; 70 stabilize S57H170
+
+for subdir in antibody
+do
+# mkdir "out"${subdir}
+cd "out"${subdir}
+for protein in `ls`; do
+    cd ${protein}
+    for protein_chain_ligand in `ls`; do
+        if ([[ ${n_chains} == 1 ]] && [[ ${protein_chain_ligand} != *"-"*"-"*"_"${ligand} ]]) || ([[ ${n_chains} == 2 ]] && [[ ${protein_chain_ligand} == *"-"*"-"*"_"${ligand} ]]); then
+            rm ${protein_chain_ligand}/*.log ${protein_chain_ligand}/*.err
+            if [ -z "$(ls -A ${protein_chain_ligand})" ]; then
+                rm -r ${protein_chain_ligand}
+                continue
+            fi
+            # for symmetry in `ls ../../pdb${subdir}/${protein}/*.symm`
+            # do
+            #     symmetry="-symm ../../"${symmetry}
+            #     break
+            # done
+            cd ${protein_chain_ligand}
+            for variant in `ls`
+            do
+                if [ -d ${variant} ] && [[ ${variant} == ${protein}"-"* ]] && [[ ${variant} == ${position_file_wildcard} ]]
+                then
+                    if [ -z "$(ls -A ${variant})" ]; then
+                        rm -r ${variant}
+                        continue
+                    fi
+                    cd ${variant}
+                    run_unbound=false
+                    for pdb_input in `ls *.pdb`
+                    do
+                        if [[ ${pdb_input} == "Z"*"X"*"-unbound.pdb" ]]
+                        then
+                            run_unbound=true
+                        fi
+                    done
+                    for pdb_input in `ls *.pdb`
+                    do
+                        if ${run_unbound} && [[ ${pdb_input} == "Z"*"X"*".pdb" ]] && [[ ${pdb_input} != *"-unbound.pdb" ]]
+                        then
+                            while [ $(squeue -u zs251 | wc -l) -ge 500 ]
+                            do
+                                sleep 180;
+                            done
+                            slurmit.py --job ${variant} --mem ${memory} --time 3-00:00:00 --command \
+                                "python ../../../../../enzdes_utils/fast_design.py ${pdb_input:0:-4}-unbound.pdb \
+                                -ref ../../../../pdb${subdir}/${protein}/${variant%%_*}-unbound.pdb \
+                                -index_ref ${pdb_input} ${params_files} ${symmetry} -sf ref2015_cst \
+                                -cat_ids TYZ ${nucleophile_name3} -sub_ids OBY \
+                                -rpk_nbh -min_nbh -n 10 -save_n 1 -prefix ${variant}-unbound;"
+                            slurmit.py --job ${variant} --mem ${memory} --time 3-00:00:00 --command \
+                                "python ../../../../../enzdes_utils/fast_design.py \
+                                ../../../../pdb${subdir}/${protein}/${variant%%_*}-unbound_relaxed.pdb \
+                                -ref ../../../../pdb${subdir}/${protein}/${variant%%_*}-unbound.pdb \
+                                -index_ref ${pdb_input} ${params_files} ${symmetry} -sf ref2015_cst \
+                                -cat_ids TYZ ${nucleophile_name3} -sub_ids OBY \
+                                -ddG_wt -rpk_nbh -min_nbh -n 10 -save_n 1 -prefix ${variant%%_*}-unbound_apo;"
+                            break
+                        fi
+                    done
+                    cd ..
+                    sleep 0.05
+                fi
+            done
+            cd ..
+        fi
+    done
+    cd ..
+done
+cd ..
+done
