@@ -1,0 +1,12 @@
+#!/bin/bash
+#SBATCH --job-name=hhblits
+#SBATCH --requeue
+#SBATCH --ntasks=4
+#SBATCH --mem=32GB
+#SBATCH --time=3-00:00:00
+#SBATCH --output=results_hhbilts_%A_%a.out
+#SBATCH --error=results_hhbilts_%A_%a.err
+#SBATCH --export=ALL
+
+python hhblits.py
+# hhblits -o /dev/null -mact 0.35 -maxfilt 20000 -neffmax 20 -all -cpu 4 -realign_max 20000 -maxmem 32 -n 1 -d /projects/f_sdk94_1/Uniref30 -i 1ysb.fasta -oa3m {oa3m_0} -e {e_val_str}
