@@ -1,0 +1,3 @@
+-extra_res_fa ../../../../ligands/O2beY-HIS/OBY.params ../../../../ligands/O2beY-HIS/TYZ.params ../../../../ligands/O2beY-HIS/HIX.params
+-match:lig_name OBY
+-match:geometric_constraint_file  ../../../../ligands/O2beY-HIS/O2beY-HIS.cst
