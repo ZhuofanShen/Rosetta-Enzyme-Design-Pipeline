@@ -1,0 +1,68 @@
+#!/bin/bash
+#SBATCH --partition=main           # Partition (job queue)
+#SBATCH --job-name match           # Assign a name to the job
+#SBATCH --nodes=1                  # Number of nodes
+#SBATCH --ntasks=1                 # Number of tasks (usually = cores) on each node
+#SBATCH --mem=200                  # Real memory required (MB)
+#SBATCH --time=3-00:00:00          # Total run time limit (HH:MM:SS)
+#SBATCH --output=slurm.%N.%j.out   # STDOUT output file
+#SBATCH --error=slurm.%N.%j.out    # STDERR output file
+#SBATCH --export=ALL               # Export you current env to the job env
+
+while (( $# > 1 ))
+do
+    case $1 in
+        # -pr) protein_database="$2";; # i.e. proteins
+        -nchains) n_chains="$2";; # i.e. 1 or 2
+        -pos) position_file_wildcard="$2";; # i.e. *_F*_E*, optional
+        -lig) ligand_path="$2";; # i.e. ligands/O2beY-GLU
+        -mem) memory="$2";;
+        *) break;
+    esac
+    shift 2
+done
+
+if [ -z "${memory}" ]
+then
+    memory="20000"
+fi
+
+ligand=${ligand_path##*/}
+
+for subdir in antibody
+do
+mkdir "out"${subdir}
+cd "out"${subdir}
+protein_database="pdb"${subdir}
+for protein in `ls ../${protein_database}`; do
+    mkdir ${protein}
+    cd ${protein}
+    # reference_pdb=$(ls ../${protein_database}/${protein}/${protein}*.pdb)
+    for protein_chain in `ls ../../${protein_database}/${protein}`; do
+        if [[ ${protein_chain} != *".pdb" ]] && [[ ${protein_chain} != *".npz" ]] && (([[ ${n_chains} == 1 ]] && [[ ${protein_chain} != *"-"*"-"* ]]) || ([[ ${n_chains} == 2 ]] && [[ ${protein_chain} == *"-"*"-"* ]])); then
+            reference_pdb=../../${protein_database}/${protein}/${protein_chain}_relaxed.pdb
+            mkdir ${protein_chain}_${ligand}
+            cd ${protein_chain}_${ligand}
+            for position_file in `ls ../../../${protein_database}/${protein}/${protein_chain}/${position_file_wildcard}*.pos`
+            do
+                position=${position_file##*/}
+                position=${position%.pos}
+                mkdir ${position}
+                cd ${position}
+                while [ $(squeue -u zs251 | wc -l) -ge 500 ]
+                do
+                    sleep 60;
+                done
+                slurmit.py --time 3-00:00:00 --job ${position} --mem ${memory} --command "~/Rosetta/main/source/bin/match.default.linuxgccrelease \
+                    @../../../../scripts-match/general_match.flags @../../../../${ligand_path}/subs.flags \
+                    -match:scaffold_active_site_residues_for_geomcsts ../${position_file} -s ../../${reference_pdb}"
+                cd ..
+                sleep 0.05
+            done
+            cd ..
+        fi
+    done
+    cd ..
+done
+cd ..
+done

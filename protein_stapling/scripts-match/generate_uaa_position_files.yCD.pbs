@@ -1,0 +1,19 @@
+#!/bin/bash
+#SBATCH --partition=main           # Partition (job queue)
+#SBATCH --job-name monitoring      # Assign a name to the job
+#SBATCH --nodes=1                  # Number of nodes
+#SBATCH --ntasks=1                 # Number of tasks (usually = cores) on each node
+#SBATCH --mem=200                 # Real memory required (MB)
+#SBATCH --time=3-00:00:00          # Total run time limit (HH:MM:SS)
+#SBATCH --output=slurm.%N.%j.out   # STDOUT output file
+#SBATCH --error=slurm.%N.%j.out    # STDERR output file
+#SBATCH --export=ALL               # Export you current env to the job env
+
+for subdir in yCD
+do
+    while [ $(squeue -u zs251 | wc -l) -ge 500 ]
+    do
+        sleep 300;
+    done
+    slurmit.py --job ${subdir} --command "python scripts-match/generate_uaa_position_files.py pdb${subdir} -np ALL -ter 100"
+done

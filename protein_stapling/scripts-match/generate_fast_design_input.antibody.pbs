@@ -1,0 +1,97 @@
+#!/bin/bash
+#SBATCH --partition=main           # Partition (job queue)
+#SBATCH --job-name reformat        # Assign a name to the job
+#SBATCH --nodes=1                  # Number of nodes
+#SBATCH --ntasks=1                 # Number of tasks (usually = cores) on each node
+#SBATCH --mem=200                  # Real memory required (MB)
+#SBATCH --time=3-00:00:00          # Total run time limit (HH:MM:SS)
+#SBATCH --output=slurm.%N.%j.out   # STDOUT output file
+#SBATCH --error=slurm.%N.%j.out    # STDERR output file
+#SBATCH --export=ALL               # Export you current env to the job env
+
+while (( $# > 1 ))
+do
+    case $1 in
+        # -pr) protein_database="$2";; # i.e. proteins
+        -nchains) n_chains="$2";; # i.e. 1 or 2
+        -pos) position_file_wildcard="$2";; # i.e. *_F*_C*, optional
+        -lig) ligand_path="$2";; # i.e. ligands/O2beY-CYS
+        -dup) duplicate_match="$2";; # optional
+        -symm) symmetry="$2";; # optional
+        -debug) debug="$2";; # optional
+        *) break;
+    esac
+    shift 2
+done
+
+if ! [ -z "${position_file_wildcard}" ]
+then
+    position_file_wildcard=*"_"*"_"*
+fi
+
+if ! [ -z "${duplicate_match}" ]
+then
+    duplicate_match="--duplicate_match"
+fi
+
+if ! [ -z "${symmetry}" ]
+then
+    symmetry="--symmetry"
+fi
+
+if ! [ -z "${debug}" ]
+then
+    debug="--debug_mode"
+fi
+
+ligand=${ligand_path##*/}
+
+# IFS=','
+# params_files="../../../"$(ls ${ligand_path}/*_ligand.params)
+# if [[ ${params_files} == "../../../" ]]
+# then
+#     params_files=""
+# fi
+# IFS='
+# '
+
+for subdir in antibody
+do
+cd "out"${subdir}
+for protein in `ls`; do
+    cd ${protein}
+    for protein_chain_ligand in `ls`; do
+        if ([[ ${n_chains} == 1 ]] && [[ ${protein_chain_ligand} == *"-"*"_"${ligand} ]] && [[ ${protein_chain_ligand} != *"-"*"-"*"_"${ligand} ]]) || ([[ ${n_chains} == 2 ]] && [[ ${protein_chain_ligand} == *"-"*"-"*"_"${ligand} ]]); then
+            if [ -z "$(ls -A ${protein_chain_ligand})" ]; then
+                rm -r ${protein_chain_ligand}
+                continue
+            fi
+            cd ${protein_chain_ligand}
+            for position in `ls`
+            do
+                if_run=false
+                if [[ -d ${position} ]]; then
+                    for match_relaxed_pdb in `ls ${position}`; do
+                        if [[ ${match_relaxed_pdb} == *"UM_"*"_"*"_"*"_1.pdb" ]]; then
+                            if_run=true
+                        elif [[ ${match_relaxed_pdb} == *".relaxed.pdb" ]]; then
+                            if_run=false
+                            break
+                        fi
+                    done
+                fi
+                if ${if_run} && [[ -d ${position} ]] && [[ ${position} == ${position_file_wildcard} ]]; then
+                    while [ $(squeue -u zs251 | wc -l) -ge 500 ]
+                    do
+                        sleep 30;
+                    done
+                    slurmit.py --job ${position} --command "python ../../../scripts-match/generate_fast_design_input.py ${position} ${duplicate_match} ${symmetry} ${debug}"
+                fi
+            done
+            cd ..
+        fi
+    done
+    cd ..
+done
+cd ..
+done

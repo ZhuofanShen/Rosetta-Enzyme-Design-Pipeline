@@ -1,0 +1,80 @@
+#!/bin/bash
+#SBATCH --partition=main           # Partition (job queue)
+#SBATCH --job-name relaxpdb      # Assign a name to the job
+#SBATCH --nodes=1                  # Number of nodes
+#SBATCH --ntasks=1                 # Number of tasks (usually = cores) on each node
+#SBATCH --mem=200                 # Real memory required (MB)
+#SBATCH --time=3-00:00:00          # Total run time limit (HH:MM:SS)
+#SBATCH --output=slurm.%N.%j.out   # STDOUT output file
+#SBATCH --error=slurm.%N.%j.out    # STDERR output file
+#SBATCH --export=ALL               # Export you current env to the job env
+
+for subdir in 00  28  53  80  a8  b5  c2  cz  dw  et  fq  gn  hk  ih  je  kb  l8  m5  n2  nz  ow  pt  qq  rn  sk  th  ue  vb  w8  x5  y2  yz  zw \
+01  29  54  81  a9  b6  c3  d0  dx  eu  fr  go  hl  ii  jf  kc  l9  m6  n3  o0  ox  pu  qr  ro  sl  ti  uf  vc  w9  x6  y3  z0  zx \
+02  2a  55  82  aa  b7  c4  d1  dy  ev  fs  gp  hm  ij  jg  kd  la  m7  n4  o1  oy  pv  qs  rp  sm  tj  ug  vd  wa  x7  y4  z1  zy \
+03  2c  56  83  ab  b8  c5  d2  dz  ew  ft  gq  hn  ik  jh  ke  lb  m8  n5  o2  oz  pw  qt  rq  sn  tk  uh  ve  wb  x8  y5  z2  zz \
+04  2e  57  84  ac  b9  c6  d3  e0  ex  fu  gr  ho  il  ji  kf  lc  m9  n6  o3  p0  px  qu  rr  so  tl  ui  vf  wc  x9  y6  z3 \
+05  2g  58  85  ad  ba  c7  d4  e1  ey  fv  gs  hp  im  jj  kg  ld  ma  n7  o4  p1  py  qv  rs  sp  tm  uj  vg  wd  xa  y7  z4 \
+06  30  59  86  ae  bb  c8  d5  e2  ez  fw  gt  hq  in  jk  kh  le  mb  n8  o5  p2  pz  qw  rt  sq  tn  uk  vh  we  xb  y8  z5 \
+07  31  5c  87  af  bc  c9  d6  e3  f0  fx  gu  hr  io  jl  ki  lf  mc  n9  o6  p3  q0  qx  ru  sr  to  ul  vi  wf  xc  y9  z6 \
+08  32  60  88  ag  bd  ca  d7  e4  f1  fy  gv  hs  ip  jm  kj  lg  md  na  o7  p4  q1  qy  rv  ss  tp  um  vj  wg  xd  ya  z7 \
+09  33  61  89  ah  be  cb  d8  e5  f2  fz  gw  ht  iq  jn  kk  lh  me  nb  o8  p5  q2  qz  rw  st  tq  un  vk  wh  xe  yb  z8 \
+0g  34  62  8d  ai  bf  cc  d9  e6  f3  g0  gx  hu  ir  jo  kl  li  mf  nc  o9  p6  q3  r0  rx  su  tr  uo  vl  wi  xf  yc  z9 \
+0m  35  63  8g  aj  bg  cd  da  e7  f4  g1  gy  hv  is  jp  km  lj  mg  nd  oa  p7  q4  r1  ry  sv  ts  up  vm  wj  xg  yd  za \
+10  36  64  8s  ak  bh  ce  db  e8  f5  g2  gz  hw  it  jq  kn  lk  mh  ne  ob  p8  q5  r2  rz  sw  tt  uq  vn  wk  xh  ye  zb \
+11  37  65  90  al  bi  cf  dc  e9  f6  g3  h0  hx  iu  jr  ko  ll  mi  nf  oc  p9  q6  r3  s0  sx  tu  ur  vo  wl  xi  yf  zc \
+12  38  66  91  am  bj  cg  dd  ea  f7  g4  h1  hy  iv  js  kp  lm  mj  ng  od  pa  q7  r4  s1  sy  tv  us  vp  wm  xj  yg  zd \
+13  39  67  92  an  bk  ch  de  eb  f8  g5  h2  hz  iw  jt  kq  ln  mk  nh  oe  pb  q8  r5  s2  sz  tw  ut  vq  wn  xk  yh  ze \
+14  3c  68  93  ao  bl  ci  df  ec  f9  g6  h3  i0  ix  ju  kr  lo  ml  ni  of  pc  q9  r6  s3  t0  tx  uu  vr  wo  xl  yi  zf \
+15  3g  69  94  ap  bm  cj  dg  ed  fa  g7  h4  i1  iy  jv  ks  lp  mm  nj  og  pd  qa  r7  s4  t1  ty  uv  vs  wp  xm  yj  zg \
+16  3p  6g  95  aq  bn  ck  dh  ee  fb  g8  h5  i2  iz  jw  kt  lq  mn  nk  oh  pe  qb  r8  s5  t2  tz  uw  vt  wq  xn  yk  zh \
+17  40  6p  96  ar  bo  cl  di  ef  fc  g9  h6  i3  j0  jx  ku  lr  mo  nl  oi  pf  qc  r9  s6  t3  u0  ux  vu  wr  xo  yl  zi \
+18  41  6v  97  as  bp  cm  dj  eg  fd  ga  h7  i4  j1  jy  kv  ls  mp  nm  oj  pg  qd  ra  s7  t4  u1  uy  vv  ws  xp  ym  zj \
+19  42  70  98  at  bq  cn  dk  eh  fe  gb  h8  i5  j2  jz  kw  lt  mq  nn  ok  ph  qe  rb  s8  t5  u2  uz  vw  wt  xq  yn  zk \
+1a  43  71  99  au  br  co  dl  ei  ff  gc  h9  i6  j3  k0  kx  lu  mr  no  ol  pi  qf  rc  s9  t6  u3  v0  vx  wu  xr  yo  zl \
+1b  44  72  9g  av  bs  cp  dm  ej  fg  gd  ha  i7  j4  k1  ky  lv  ms  np  om  pj  qg  rd  sa  t7  u4  v1  vy  wv  xs  yp  zm \
+1g  45  73  9h  aw  bt  cq  dn  ek  fh  ge  hb  i8  j5  k2  kz  lw  mt  nq  on  pk  qh  re  sb  t8  u5  v2  vz  ww  xt  yq  zn \
+20  46  74  a0  ax  bu  cr  do  el  fi  gf  hc  i9  j6  k3  l0  lx  mu  nr  oo  pl  qi  rf  sc  t9  u6  v3  w0  wx  xu  yr  zo \
+21  47  75  a1  ay  bv  cs  dp  em  fj  gg  hd  ia  j7  k4  l1  ly  mv  ns  op  pm  qj  rg  sd  ta  u7  v4  w1  wy  xv  ys  zp \
+22  48  76  a2  az  bw  ct  dq  en  fk  gh  he  ib  j8  k5  l2  lz  mw  nt  oq  pn  qk  rh  se  tb  u8  v5  w2  wz  xw  yt  zq \
+23  49  77  a3  b0  bx  cu  dr  eo  fl  gi  hf  ic  j9  k6  l3  m0  mx  nu  or  po  ql  ri  sf  tc  u9  v6  w3  x0  xx  yu  zr \
+24  4g  78  a4  b1  by  cv  ds  ep  fm  gj  hg  id  ja  k7  l4  m1  my  nv  os  pp  qm  rj  sg  td  ua  v7  w4  x1  xy  yv  zs \
+25  50  79  a5  b2  bz  cw  dt  eq  fn  gk  hh  ie  jb  k8  l5  m2  mz  nw  ot  pq  qn  rk  sh  te  ub  v8  w5  x2  xz  yw  zt \
+26  51  7g  a6  b3  c0  cx  du  er  fo  gl  hi  if  jc  k9  l6  m3  n0  nx  ou  pr  qo  rl  si  tf  uc  v9  w6  x3  y0  yx  zu \
+27  52  7r  a7  b4  c1  cy  dv  es  fp  gm  hj  ig  jd  ka  l7  m4  n1  ny  ov  ps  qp  rm  sj  tg  ud  va  w7  x4  y1  yy  zv
+do
+    cd pdb${subdir}
+    for pdb in `ls`
+    do
+        if [[ -d ${pdb} ]]
+        then
+            cd ${pdb}
+            for pdb_chain in `ls *.pdb`
+            do
+                if [[ ${pdb_chain} != *".relaxed.pdb" ]]
+                then
+                    while [ $(squeue -u zs251 | wc -l) -ge 500 ]
+                    do
+                        sleep 300;
+                    done
+/usr/bin/sbatch << EOF
+#!/bin/bash
+#SBATCH --partition=main
+#SBATCH --job-name ${pdb_chain:0:-4}
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --mem 2000
+#SBATCH --time=8:00:00
+#SBATCH --output=${pdb_chain:0:-4}.log
+#SBATCH --error=${pdb_chain:0:-4}.err
+#SBATCH --export=ALL
+
+python ../../scripts-match/relax_pdb.py ${pdb_chain} -n 1
+EOF
+                fi
+            done
+            cd ..
+        fi
+    done
+    cd ..
+done
