@@ -293,15 +293,17 @@ def make_relax_input_files(directory, match_dict, duplicate_match=False, symmetr
                     for line in p_match:
                         if not read_ligand and (line.startswith("ATOM  ") or line.startswith("HETATM")):
                             if line[17:20] == remarks[0][28:31]:
-                                read_ligand = True
-                                lines.append(line[:21] + remarks[0][49] + " 999" + line[26:])
+                                # read_ligand = True
+                                # lines.append(line[:21] + remarks[0][49] + " 999" + line[26:])
+                                break # DO NOT append the first substrate conformer to pdb lines
                             else:
                                 lines.append(line)
-                        elif read_ligand:
-                            if line[17:20] == remarks[0][28:31]:
-                                lines.append(line[:21] + remarks[0][49] + " 999" + line[26:])
-                            else:
-                                break
+                        # elif read_ligand:
+                        #     if line[17:20] == remarks[0][28:31]:
+                        #         lines.append(line[:21] + remarks[0][49] + " 999" + line[26:])
+                        #     else:
+                        #         break
+
                         # if not read_ligand and (line.startswith("ATOM  ") or line.startswith("HETATM")):
                         #     lines.append(line)
                         # elif not read_ligand and line.startswith("HETNAM     " + remarks[0][28:31]):
