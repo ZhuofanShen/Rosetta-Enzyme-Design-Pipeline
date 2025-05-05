@@ -16,7 +16,6 @@ do
         -nchains) n_chains="$2";; # i.e. 1 or 2
         -pos) position_file_wildcard="$2";; # i.e. *_F*_C*, optional
         -lig) ligand_path="$2";; # i.e. ligands/O2beY-CYS
-        -dup) duplicated="$2";; # optional
         -n) decoys="$2";; # optional
         -mem) memory="$2";; # optional
         *) break;
@@ -27,13 +26,6 @@ done
 if ! [ -z "${position_file_wildcard}" ]
 then
     position_file_wildcard=*"_"*"_"*
-fi
-
-if [ -z "${duplicated}" ]
-then
-    enzdes_cst_suffix=_Relax.cst
-else
-    enzdes_cst_suffix=_duplicated.cst
 fi
 
 if ! [ -z "${decoys}" ]
@@ -56,84 +48,23 @@ done
 
 ligand=${ligand_path##*/}
 
-# improper dihedral 1
-dihe_atoms="-dihe_atoms OBY,O1 OBY,C1 OBY,C2 TYZ,OH"
-dihe_params="-dihe_params 0,1"
-
 case ${ligand_path##*-} in
     ASP)
         nucleophile_name3=ASX
-        # improper dihedral 2
-        improper2=" OBY,S1 OBY,C2 OBY,C1 ASX,OD2"
-        
-        # dihedral 2 AB
-        dihe_atoms=${dihe_atoms}" OBY,C1 OBY,C2 ASX,OD2 ASX,CG"
-        dihe_params=${dihe_params}" 180,59,80,35,280,35" # " 180,59,85,35,275,35" 59 stabilize Y32E55; 42 destabilize M104E164
-        # dihedral 2 B
-        dihe_atoms=${dihe_atoms}" OBY,C2 ASX,OD2 ASX,CG ASX,CB"
-        dihe_params=${dihe_params}" 180,20"
         ;;
     GLU)
         nucleophile_name3=GLX
-        # improper dihedral 2
-        improper2=" OBY,S1 OBY,C2 OBY,C1 GLX,OE2"
-        # dihedral 2 AB
-        dihe_atoms=${dihe_atoms}" OBY,C1 OBY,C2 GLX,OE2 GLX,CD"
-        dihe_params=${dihe_params}" 180,59,80,35,280,35" # " 180,59,85,35,275,35" 59 stabilize Y32E55; 42 destabilize M104E164
-        # dihedral 2 B
-        dihe_atoms=${dihe_atoms}" OBY,C2 GLX,OE2 GLX,CD GLX,CG"
-        dihe_params=${dihe_params}" 180,20"
         ;;
     CYS)
         nucleophile_name3=CYX
-        # improper dihedral 2
-        improper2=" OBY,S1 OBY,C2 OBY,C1 CYX,SG"
-        # dihedral 2 AB
-        dihe_atoms=${dihe_atoms}" OBY,C1 OBY,C2 CYX,SG CYX,CB"
-        dihe_params=${dihe_params}" 180,42,70,33,290,33"
-        # dihedral 2 B
-        dihe_atoms=${dihe_atoms}" OBY,C2 CYX,SG CYX,CB CYX,CA"
-        dihe_params=${dihe_params}" 180,42,70,33,290,33"
         ;;
     HIS)
         nucleophile_name3=HIX
-        # improper dihedral 2
-        improper2=" OBY,S1 OBY,C2 OBY,C1 HIX,NE2"
-        # # dihedral 2 AB
-        # dihe_atoms=${dihe_atoms}" OBY,C1 OBY,C2 HIX,NE2 HIX,CD2"
-        # dihe_params=${dihe_params}" 90,58,270,58"
-        # dihedral 2 B
-        dihe_atoms=${dihe_atoms}" OBY,C2 HIX,NE2 HIX,CD2 HIX,CG"
-        dihe_params=${dihe_params}" 180,1"
         ;;
     LYS)
         nucleophile_name3=LYX
-        # improper dihedral 2
-        improper2=" OBY,S1 OBY,C2 OBY,C1 LYX,NZ"
-        # improper dihedral lysine
-        dihe_atoms=${dihe_atoms}" OBY,C2 LYX,CE LYX,NZ LYX,3HZ"
-        dihe_params=${dihe_params}" 0,1"
-        # dihedral 2 AB
-        dihe_atoms=${dihe_atoms}" OBY,C1 OBY,C2 LYX,NZ LYX,CE"
-        dihe_params=${dihe_params}" 180,36,60,33,300,33" # tried 35,29 170.308035        ddG  7l6v_M104UAA_K166
-        # dihedral 2 B
-        dihe_atoms=${dihe_atoms}" OBY,C2 LYX,NZ LYX,CE LYX,CD"
-        dihe_params=${dihe_params}" 180,36,60,33,300,33" # tried 35,29 170.308035        ddG  7l6v_M104UAA_K166
         ;;
 esac
-
-# improper dihedral 2
-dihe_atoms=${dihe_atoms}${improper2}
-dihe_params=${dihe_params}" 0,1"
-# dihedral 1/2 A
-dihe_atoms=${dihe_atoms}" OBY,O1 OBY,C1 OBY,C2 OBY,S1"
-dihe_params=${dihe_params}" 180,37,70,33,290,33" # " 180,37,70,25,290,25"
-# dihedral 1 B
-dihe_atoms=${dihe_atoms}" OBY,C1 TYZ,OH TYZ,CZ TYZ,CE1"
-dihe_params=${dihe_params}" 0,50,180,50"
-# dihedral 1 AB
-dihe_atoms=${dihe_atoms}" OBY,C2 OBY,C1 TYZ,OH TYZ,CZ"
-dihe_params=${dihe_params}" 180,36,70,33,290,33" # " 180,36,80,33,280,33" 80 destabilize Y106E55; 70 stabilize S57H170
 
 for subdir in antibody
 do
