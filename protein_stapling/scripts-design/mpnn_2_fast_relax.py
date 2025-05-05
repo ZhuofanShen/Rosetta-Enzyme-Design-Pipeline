@@ -31,7 +31,7 @@ if __name__ == "__main__":
         
         # dihedral 2 AB
         dihe_atoms+=" OBY,C1 OBY,C2 ASX,OD2 ASX,CG"
-        dihe_params+=" 180,59,80,35,280,35"
+        dihe_params+=" 180,59,70,35,290,35"
         # dihedral 2 B
         dihe_atoms+=" OBY,C2 ASX,OD2 ASX,CG ASX,CB"
         dihe_params+=" 180,20"
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         improper2=" OBY,S1 OBY,C2 OBY,C1 GLX,OE2"
         # dihedral 2 AB
         dihe_atoms+=" OBY,C1 OBY,C2 GLX,OE2 GLX,CD"
-        dihe_params+=" 180,59,80,35,280,35"
+        dihe_params+=" 180,59,70,35,290,35"
         # dihedral 2 B
         dihe_atoms+=" OBY,C2 GLX,OE2 GLX,CD GLX,CG"
         dihe_params+=" 180,20"
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     dihe_params+=" 0,1"
     # dihedral 1/2 A
     dihe_atoms+=" OBY,O1 OBY,C1 OBY,C2 OBY,S1"
-    dihe_params+=" 180,37,70,33,290,33"
+    dihe_params+=" 180,37,60,33,300,33"
     # dihedral 1 B
     dihe_atoms+=" OBY,C1 TYZ,OH TYZ,CZ TYZ,CE1"
     dihe_params+=" 0,50,180,50"
