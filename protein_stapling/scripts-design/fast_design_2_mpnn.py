@@ -55,7 +55,8 @@ if __name__ == "__main__":
     parser.add_argument('-lig', "--ligand", type=str, default="O2beY-CYS")
     parser.add_argument('--process_variants', type=str, nargs="*", default=list()) # e.g., 1ysb-A_S6_E126
     parser.add_argument('-s', '--step', choices=['design', 'relax'], default='relax')
-    parser.add_argument('-o', '--option', choices=['csv', 'mpnn', 'mpnnall', 'bar'], default='csv')
+    parser.add_argument('-o', '--option', choices=['csv', 'mpnn', 'mpnnall', 'barplot'], default='csv')
+    parser.add_argument("--ddg_bind", action="store_true")
     parser.add_argument('-od', '--output_directory', type=str, default='mpnn')
     # parser.add_argument('-cat', '--catalytic_residues', type=str, nargs="*", default=["62", "91", "94", "155", "64", "51", "53", "93", "86", "88", "152", "114", "156", "33", "31", "141", "89", "90", "116", "65", "95", "100"])
     parser.add_argument('-cat', '--catalytic_residues', type=str, nargs="*", default=["1", "18", "22", "25", "28", "29", "30", "32", "33", "34", "37", "43", "49", "51", "53", "55", "62", "64", "71", "72", "73", "79", "86", "87", "88", "90", "91", "94", "96", "103", "106", "109", "110", "114", "116", "122", "126", "127", "137", "141", "144", "149", "152", "154", "155", "156", "157", "93", "31", "89", "65", "95", "100"]) # , "93", "31", "89", "65", "95", "100"
@@ -139,14 +140,14 @@ if __name__ == "__main__":
                                 fasc_list.append(fasc)
                 
                 pass_threshold = False
-                lowest_ddg_total_score = 1000000
+                lowest_ddg = 1000000
                 lowest_fasc = None
                 for fasc in fasc_list:
                     path = fasc[:fasc.rfind("/")]
                     wt_total_score = 0
                     wt_unbound_total_score = 0
                     wt_fasc = os.path.join(path, pdb_chain + "_apo.sc")
-                    if os.path.isfile(wt_fasc):
+                    if args.ddg_bind and os.path.isfile(wt_fasc):
                         wt_score_dict = read_scores_from_fasc(wt_fasc)[0]
                         wt_total_score = wt_score_dict["total_score"] - wt_score_dict["coordinate_constraint"]
                         wt_unbound_fasc = os.path.join(path, pdb_chain + "-unbound_apo.sc")
@@ -162,19 +163,19 @@ if __name__ == "__main__":
                     score_dict = read_scores_from_fasc(fasc, n=args.read_n_decoys)[0]
                     total_score = score_dict["total_score"] - score_dict["coordinate_constraint"]
                     dG_bind_mut = total_score - unbound_total_score
-                    ddg_total_score = dG_bind_mut - dG_bind_wt
-                    # ddg_total_score = (score_dict["total_score"] - score_dict["coordinate_constraint"]) - wt_total_score
-                    residue_total_score = score_dict["substrates"]
+                    ddg = dG_bind_mut - dG_bind_wt
+                    # ddg = (score_dict["total_score"] - score_dict["coordinate_constraint"]) - wt_total_score
+                    residue_energy = score_dict["substrates"]
                     residue_cst_score = score_dict["atom_pair_constraint"] + \
                             score_dict["angle_constraint"] + score_dict["dihedral_constraint"]
                     decoy = os.path.join(path, score_dict["decoy"])
                     
                     if if_process_current_variant_anyway or args.step == "relax" or \
-                            (args.step == "design" and residue_total_score < 3 and residue_cst_score < 3):
+                            (args.step == "design" and residue_energy < 3 and residue_cst_score < 3):
                         pass_threshold = True
                         if args.option == "csv" or args.option == "mpnn" or args.option == "mpnnall":
-                            var_dict = {"variant": [variant_pdb_numbering], "ddG": [ddg_total_score], \
-                                    "xlink": [residue_total_score], "xlink_cst": [residue_cst_score]}
+                            var_dict = {"variant": [variant_pdb_numbering], "ddG": [ddg], \
+                                    "xlink": [residue_energy], "xlink_cst": [residue_cst_score]}
                             if args.step == "relax":
                                 pseudo_wt_pose = pose_from_pdb(os.path.join(variant_path, variant_pdb))
                                 pseudo_wt_sequence = pseudo_wt_pose.sequence()
@@ -199,10 +200,10 @@ if __name__ == "__main__":
                                 shutil.copy(decoy, os.path.join(pdb_ligand_path, variant_pdb_numbering + "X" + mutations_pdb_index_str + ".pdb"))
                             df_list.append(pd.DataFrame(var_dict))
 
-                        if ddg_total_score < lowest_ddg_total_score:
+                        if ddg < lowest_ddg:
                             lowest_fasc = fasc
-                            lowest_ddg_total_score = ddg_total_score
-                            lowest_residue_total_score = residue_total_score
+                            lowest_ddg = ddg
+                            lowest_residue_energy = residue_energy
                             lowest_residue_cst_score = residue_cst_score
                             mpnn_input = os.path.join(variant_path, variant_pdb.split(".")[0] + ".MPNN.pdb")
                 if (args.option == "mpnn" or args.option == "mpnnall") and lowest_fasc is not None and not os.path.isfile(mpnn_input):
@@ -363,7 +364,7 @@ if __name__ == "__main__":
                                  " --ligand_mpnn_use_side_chain_context 1\n")
                         pf.write("exit\n")
 
-                elif args.option == "bar" and lowest_fasc is not None:
+                elif args.option == "barplot" and lowest_fasc is not None:
                     score_types = ["ddG", "UAA", "UAA_cst"]
                     path = lowest_fasc[:fasc.rfind("/")]
                     wt_fasc = os.path.join(path, pdb_chain + "_apo.sc")
@@ -372,25 +373,25 @@ if __name__ == "__main__":
                         wt_total_score = read_scores_from_fasc(wt_fasc)[0]["total_score"]
                     scores = read_scores_from_fasc(fasc, n=args.read_n_decoys)
                     
-                    ddg_total = list()
-                    residue_total = list()
-                    residue_cst = list()
+                    ddg_values = list()
+                    residue_energies = list()
+                    residue_cst_scores = list()
                     for i, score_dict in enumerate(scores):
                         # decoy = os.path.join(path, score_dict["decoy"])
-                        ddg_total_score = score_dict["total_score"] - wt_total_score
-                        residue_total_score = score_dict["substrates"]
+                        ddg = score_dict["total_score"] - wt_total_score
+                        residue_energy = score_dict["substrates"]
                         residue_cst_score = score_dict["atom_pair_constraint"] + \
                                 score_dict["angle_constraint"] + score_dict["dihedral_constraint"]
-                        ddg_total.append(ddg_total_score)
-                        residue_total.append(residue_total_score)
-                        residue_cst.append(residue_cst_score)
-                        # residue_total_score = 0
-                        # residue_cst_scores = list()
+                        ddg_values.append(ddg)
+                        residue_energies.append(residue_energy)
+                        residue_cst_scores.append(residue_cst_score)
+                        # residue_energy = 0
+                        # residue_cst_terms = list()
                         # with open(decoy, "r") as pf:
                         #     for line in pf:
                         #         if line.startswith("pose "):
                         #             info = line[:-1].split(" ")
-                        #             ddg_total.append(float(info[-1]) - float(info[-2]) - float(info[-13]) - wt_total_score)
+                        #             ddg_values.append(float(info[-1]) - float(info[-2]) - float(info[-13]) - wt_total_score)
                         #         elif line.startswith("TYZ:MP-OH-connect_") or line.startswith("ASX:MP-OD2-connect_") or \
                         #                 line.startswith("GLX:MP-OE2-connect_") or line.startswith("HIX:MP-NE2-connect_") or \
                         #                 line.startswith("CYX:MP-SG-connect_") or line.startswith("LYX:MP-NZ-connect_") or \
@@ -398,15 +399,15 @@ if __name__ == "__main__":
                         #                 line.startswith("TYR:MP-SG-connect_") or line.startswith("MET:MP-NZ-connect_") or \
                         #                 line.startswith("OBY:"):
                         #             info = line[:-1].split(" ")
-                        #             residue_total_score += (float(info[-1]) - float(info[-2]) - float(info[-13]))
-                        #             residue_cst_scores.append(float(info[-11]))
-                        #             residue_cst_scores.append(float(info[-12]))
-                        #             residue_cst_scores.append(float(info[-14]))
-                        # residue_total.append(residue_total_score)
-                        # residue_cst.append(max(residue_cst_scores))
-                    x = list(range(len(ddg_total)))
+                        #             residue_energy += (float(info[-1]) - float(info[-2]) - float(info[-13]))
+                        #             residue_cst_terms.append(float(info[-11]))
+                        #             residue_cst_terms.append(float(info[-12]))
+                        #             residue_cst_terms.append(float(info[-14]))
+                        # residue_energies.append(residue_energy)
+                        # residue_cst.append(max(residue_cst_terms))
+                    x = list(range(len(ddg_values)))
                     xticks = list(range(1, len(x) + 1))
-                    for i, y_values in enumerate([ddg_total, residue_total, residue_cst]):
+                    for i, y_values in enumerate([ddg_values, residue_energies, residue_cst_scores]):
                         plt.bar(x, y_values, width=0.5, color='blue')
                         plt.xticks(x, xticks)
                         # plt.yticks(list(range(-7, 11)), list(range(-7, 11)))
