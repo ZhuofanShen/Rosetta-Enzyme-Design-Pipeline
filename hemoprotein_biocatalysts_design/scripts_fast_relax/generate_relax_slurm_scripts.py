@@ -23,6 +23,10 @@ time = args.time
 config_chi2_dict = {"1R2R+": "80", "1R2R-": "260", "1S2S+": "100", "1S2S-": "280", \
         "1R2S+": "74", "1R2S-": "256", "1S2R+": "104", "1S2R-": "286"}
 
+styrenyl_dihe_params = str()
+if not args.substrate.endswith("cyclopropanation_benzofuran_EDA"):
+    styrenyl_dihe_params = ' 0,42.97'
+
 if not os.path.isdir(variant_path):
     os.mkdir(variant_path)
 for stereo in ["1R2R", "1S2S", "1R2S", "1S2R"]:
@@ -37,8 +41,11 @@ for stereo in ["1R2R", "1S2S", "1R2S", "1S2R"]:
                     chi6 = " " + stereo_abbrv + "T,6,90,270"
                 else:
                     chi6 = str()
+                styrenyl_dihe_atoms = str()
+                if not args.substrate.endswith("cyclopropanation_benzofuran_EDA"):
+                    styrenyl_dihe_atoms = ' ' + stereo_abbrv + 'T,CST1 ' + stereo_abbrv + 'T,CST2 ' + stereo_abbrv + 'T,CAR1 ' + stereo_abbrv + 'T,CAR2'
                 with open(complex_sub_path + "/" + script + ".sh", "w") as pf:
-                    pf.write('slurmit.py --job ' + variant + '_' + stereo + '-rot' + str(rot) + ester + ' --partition main --time ' + time + ':00:00 --command "python ../../../../../../../enzdes_utils/fast_design.py ../../../complexes/' + pdb + '_' + stereo + '-rot' + str(rot) + '.pdb -ref ../../../../' + pdb + '_clean.pdb -index_ref ../../../complexes/' + pdb + '_1X2X-rotn.pdb -params ' + os.path.join(substrate_path, 'RRT.params') + ' ' + os.path.join(substrate_path, 'SST.params') + ' ' + os.path.join(substrate_path, 'RST.params') + ' ' + os.path.join(substrate_path, 'SRT.params') + ' -edges [-1,-2,FE,N1] -chis' + chi2 + chi6 + ' -dihe_atoms ' + stereo_abbrv + 'T,N1 ' + stereo_abbrv + 'T,Fe ' + stereo_abbrv + 'T,CARB ' + stereo_abbrv + 'T,CEST ' + stereo_abbrv + 'T,OCAR ' + stereo_abbrv + 'T,CEST ' + stereo_abbrv + 'T,OEST ' + stereo_abbrv + 'T,CET1 ' + stereo_abbrv + 'T,CST1 ' + stereo_abbrv + 'T,CST2 ' + stereo_abbrv + 'T,CAR1 ' + stereo_abbrv + 'T,CAR2 -dihe_params 0,34.95 0,21.77 0,42.97 -enzdes_cst ' + os.path.join(substrate_path, 'HEM-TS-' + stereo + '.cst') + ' -no_min_sc_ids HEM -no_min_je_ids HEM RRT SST SRT RST -sub_ids RRT SST SRT RST -muts ' + mutations + ' -rpk_nbh -no_rpk_enzdes -min_nbh -n ' + n_decoy + ' -prefix ' + pdb + '_' + stereo + '-rot' + str(rot) + ester + ' --score_terms fa_intra_rep_nonprotein:0.545 fa_intra_atr_nonprotein:1"')
+                    pf.write('slurmit.py --job ' + variant + '_' + stereo + '-rot' + str(rot) + ester + ' --partition main --time ' + time + ':00:00 --command "python ../../../../../../../enzdes_utils/fast_design.py ../../../complexes/' + pdb + '_' + stereo + '-rot' + str(rot) + '.pdb -ref ../../../../' + pdb + '_clean.pdb -index_ref ../../../complexes/' + pdb + '_1X2X-rotn.pdb -params ' + os.path.join(substrate_path, 'RRT.params') + ' ' + os.path.join(substrate_path, 'SST.params') + ' ' + os.path.join(substrate_path, 'RST.params') + ' ' + os.path.join(substrate_path, 'SRT.params') + ' -edges [-1,-2,FE,N1] -chis' + chi2 + chi6 + ' -dihe_atoms ' + stereo_abbrv + 'T,N1 ' + stereo_abbrv + 'T,Fe ' + stereo_abbrv + 'T,CARB ' + stereo_abbrv + 'T,CEST ' + stereo_abbrv + 'T,OCAR ' + stereo_abbrv + 'T,CEST ' + stereo_abbrv + 'T,OEST ' + stereo_abbrv + 'T,CET1' + styrenyl_dihe_atoms + ' -dihe_params 0,34.95 0,21.77' + styrenyl_dihe_params + ' -enzdes_cst ' + os.path.join(substrate_path, 'HEM-TS-' + stereo + '.cst') + ' -no_min_sc_ids HEM -no_min_je_ids HEM RRT SST SRT RST -sub_ids RRT SST SRT RST -muts ' + mutations + ' -rpk_nbh -no_rpk_enzdes -min_nbh -n ' + n_decoy + ' -prefix ' + pdb + '_' + stereo + '-rot' + str(rot) + ester + ' --score_terms fa_intra_rep_nonprotein:0.545 fa_intra_atr_nonprotein:1"')
 sub_path = variant_path + "/" + pdb
 if not os.path.isdir(sub_path):
     os.mkdir(sub_path)
