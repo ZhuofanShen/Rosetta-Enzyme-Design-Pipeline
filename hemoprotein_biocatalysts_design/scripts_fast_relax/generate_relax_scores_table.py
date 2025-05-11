@@ -91,7 +91,7 @@ def read_variant_scores(enz_var, row, sum_sheets, scores_sheets, ts_sheets, \
                 # lowest_no_1r2r = enz_no_1r2r
             if remove_redundant_decoys:
                 for decoy in os.listdir(enz_var + "/" + pdb + "_1R2R-rot" + rot_name):
-                    if not decoy.endswith("_" + str(enz_no) + ".pdb") and \
+                    if not decoy.endswith("_" + str(enz_no_1r2r) + ".pdb") and \
                             not decoy.endswith('.fasc'):
                         os.remove(enz_var + "/" + pdb + "_1R2R-rot" + rot_name + '/' + decoy)
         elif remove_redundant_decoys:
@@ -146,7 +146,7 @@ def read_variant_scores(enz_var, row, sum_sheets, scores_sheets, ts_sheets, \
                 # lowest_no_1s2s = enz_no_1s2s
             if remove_redundant_decoys:
                 for decoy in os.listdir(enz_var + "/" + pdb + "_1S2S-rot" + rot_name):
-                    if not decoy.endswith("_" + str(enz_no) + ".pdb") and \
+                    if not decoy.endswith("_" + str(enz_no_1s2s) + ".pdb") and \
                             not decoy.endswith('.fasc'):
                         os.remove(enz_var + "/" + pdb + "_1S2S-rot" + rot_name + '/' + decoy)
         elif remove_redundant_decoys:
@@ -201,7 +201,7 @@ def read_variant_scores(enz_var, row, sum_sheets, scores_sheets, ts_sheets, \
                 # lowest_no_1r2s = enz_no_1r2s
             if remove_redundant_decoys:
                 for decoy in os.listdir(enz_var + "/" + pdb + "_1R2S-rot" + rot_name):
-                    if not decoy.endswith("_" + str(enz_no) + ".pdb") and \
+                    if not decoy.endswith("_" + str(enz_no_1r2s) + ".pdb") and \
                             not decoy.endswith('.fasc'):
                         os.remove(enz_var + "/" + pdb + "_1R2S-rot" + rot_name + '/' + decoy)
         elif remove_redundant_decoys:
@@ -256,7 +256,7 @@ def read_variant_scores(enz_var, row, sum_sheets, scores_sheets, ts_sheets, \
                 # lowest_no_1s2r = enz_no_1s2r
             if remove_redundant_decoys:
                 for decoy in os.listdir(enz_var + "/" + pdb + "_1S2R-rot" + rot_name):
-                    if not decoy.endswith("_" + str(enz_no) + ".pdb") and \
+                    if not decoy.endswith("_" + str(enz_no_1s2r) + ".pdb") and \
                             not decoy.endswith('.fasc'):
                         os.remove(enz_var + "/" + pdb + "_1S2R-rot" + rot_name + '/' + decoy)
         elif remove_redundant_decoys:
