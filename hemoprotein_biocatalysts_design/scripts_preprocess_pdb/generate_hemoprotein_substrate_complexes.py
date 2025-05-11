@@ -74,7 +74,7 @@ for pdb in filter(lambda x: os.path.isfile(os.path.join(dir, x, x + "_relaxed.pd
                         pass
             cmd.load(os.path.join(dir, pdb, pdb + "_relaxed.pdb"), pdb)
             for stereo in args.isomers:
-                cmd.load(os.path.join(substrate_path, stereo + "T.pdb"))
+                cmd.load(os.path.join(substrate_path, stereo + ".pdb"))
             ddG_ref_pdb_string = pdb
             pdb_index = 0
             for stereo in args.isomers:
