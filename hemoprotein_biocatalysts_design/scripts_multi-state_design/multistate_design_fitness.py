@@ -162,15 +162,15 @@ def multistate_design_fitness(state_specific_pseudoWT_dG, state_site_aa_specific
     configuration_specific_pseudoWT_partition_sum = torch.empty(0)
     configuration_site_aa_specific_ddG_bind_boltzmann_factor = torch.empty(0, n_pos, n_AA)
     for i_state in range(0, state_site_aa_specific_partition.shape[0], 8):
-        site_aa_specific_partition_conformer_sum = torch.sum(state_site_aa_specific_partition[i_state: i_state + 8, :, :], dim=0)
+        site_aa_specific_conformer_partition_sum = torch.sum(state_site_aa_specific_partition[i_state: i_state + 8, :, :], dim=0)
         configuration_site_aa_specific_partition_sum = torch.cat(\
-            (configuration_site_aa_specific_partition_sum, site_aa_specific_partition_conformer_sum[None, :, :]), \
+            (configuration_site_aa_specific_partition_sum, site_aa_specific_conformer_partition_sum[None, :, :]), \
             dim=0)
         pseudoWT_conformer_partition_sum = torch.sum(state_specific_pseudoWT_partition[i_state: i_state + 8], dim=0)
         configuration_specific_pseudoWT_partition_sum = torch.cat(\
             (configuration_specific_pseudoWT_partition_sum, pseudoWT_conformer_partition_sum[None]), \
             dim=0)
-        site_aa_specific_ddG_bind_boltzmann_factor = torch.div(site_aa_specific_partition_conformer_sum, pseudoWT_conformer_partition_sum)
+        site_aa_specific_ddG_bind_boltzmann_factor = torch.div(site_aa_specific_conformer_partition_sum, pseudoWT_conformer_partition_sum)
         configuration_site_aa_specific_ddG_bind_boltzmann_factor = torch.cat(\
             (configuration_site_aa_specific_ddG_bind_boltzmann_factor, site_aa_specific_ddG_bind_boltzmann_factor[None, :, :]), \
             dim=0)
@@ -220,18 +220,27 @@ def multistate_design_fitness(state_specific_pseudoWT_dG, state_site_aa_specific
                 (configuration_site_aa_specific_fitness_boltzmann_factor, \
                 site_aa_specific_fitness_boltzmann_factor[None, :, :]), dim=0)
         for i_state in range(8 * i_configuration, 8 * (i_configuration + 1)):
+            site_aa_specific_enantioselectivity_boltzmann_factor = torch.div(\
+                state_site_aa_specific_partition[i_state, :, :], \
+                site_aa_specific_unfavorable_enantiomers_partition_sum)
             site_aa_specific_enantio_fitness_boltzmann_factor = torch.mul(\
                     state_site_aa_specific_ddG_boltzmann_factor[i_state], \
                     site_aa_specific_enantioselectivity_boltzmann_factor)
             state_site_aa_specific_enantio_fitness_boltzmann_factor = torch.cat(\
                     (state_site_aa_specific_enantio_fitness_boltzmann_factor, \
                     site_aa_specific_enantio_fitness_boltzmann_factor[None, :, :]), dim=0)
+            site_aa_specific_diastereoselectivity_boltzmann_factor = torch.div(\
+                state_site_aa_specific_partition[i_state, :, :], \
+                site_aa_specific_unfavorable_diastereomers_partition_sum)
             site_aa_specific_diastereo_fitness_boltzmann_factor = torch.mul(\
                     state_site_aa_specific_ddG_boltzmann_factor[i_state], \
                     site_aa_specific_diastereoselectivity_boltzmann_factor)
             state_site_aa_specific_diastereo_fitness_boltzmann_factor = torch.cat(\
                     (state_site_aa_specific_diastereo_fitness_boltzmann_factor, \
                     site_aa_specific_diastereo_fitness_boltzmann_factor[None, :, :]), dim=0)
+            site_aa_specific_stereoselectivity_boltzmann_factor = torch.div(\
+                state_site_aa_specific_partition[i_state, :, :], \
+                site_aa_specific_unfavorable_stereoisomers_partition_sum)
             site_aa_specific_fitness_boltzmann_factor = torch.mul(\
                     state_site_aa_specific_ddG_boltzmann_factor[i_state], \
                     site_aa_specific_stereoselectivity_boltzmann_factor)
