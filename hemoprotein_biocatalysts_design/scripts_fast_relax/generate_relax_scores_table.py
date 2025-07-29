@@ -330,7 +330,7 @@ def read_variant_scores(enz_path, preferred_stereoisomer, baseline_dGs=None, \
     # xls_row_info.append(round(diastereoselectivity, 2)) # [85]
     # xls_row_info.append(round(enantioselectivity, 2)) # [86]
 
-    return enz_var, xls_row_info, baseline_dGs, baseline_partition_function
+    return xls_row_info, baseline_dGs, baseline_partition_function
 
 def write_xls_row(row, enz_var, xls_row_info, sum_sheets, scores_sheets, ts_sheets, \
         green_style, orange_style):
@@ -397,13 +397,14 @@ def write_xls_row(row, enz_var, xls_row_info, sum_sheets, scores_sheets, ts_shee
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("baseline_variant", type=str)
+    parser.add_argument("-d", "--directory", type=str, default=".")
+    parser.add_argument("-baseline", "--baseline_variant_path", type=str)
     parser.add_argument("-s", "--preferred_stereoisomer", type=int, choices=[0, 1, 2, 3])
     parser.add_argument("-t", "--temperature", type=float, default=3)
     parser.add_argument("-rank", "--rank_fitness", type=str, choices=["m", "p", "f", "b", "s", "e", "d"])
     parser.add_argument("-rm", "--remove_redundant_decoys", action="store_true")
     args = parser.parse_args()
-    baseline_variant = args.baseline_variant
+    baseline_variant = args.baseline_variant_path.rstrip("/").split("/")[-1]
     pdb = baseline_variant.split("_")[0]
     preferred_stereoisomer = args.preferred_stereoisomer
     temperature = args.temperature
@@ -450,17 +451,17 @@ if __name__ == "__main__":
     # sum_sheets[2].write(0, 5, "stereoselectivity")
     # sum_sheets[2].write(0, 6, "diastereoselectivity")
     # sum_sheets[2].write(0, 7, "enantioselectivity")
-    enz_var, xls_row_info, baseline_dGs, baseline_partition_function = read_variant_scores(\
-        baseline_variant, preferred_stereoisomer, temperature=temperature, \
-        remove_redundant_decoys=args.remove_redundant_decoys)
-    write_xls_row(1, enz_var, xls_row_info, sum_sheets, scores_sheets, ts_sheets, \
+    xls_row_info, baseline_dGs, baseline_partition_function = read_variant_scores(\
+            args.baseline_variant_path.rstrip("/"), preferred_stereoisomer, temperature=temperature, \
+            remove_redundant_decoys=args.remove_redundant_decoys)
+    write_xls_row(1, baseline_variant, xls_row_info, sum_sheets, scores_sheets, ts_sheets, \
             green_style, orange_style)
     scores_dict = dict()
-    for enz_path in filter(lambda x: x != baseline_variant and os.path.isdir(x) and \
-            x.startswith(pdb + "_"), sorted(os.listdir())):
-        enz_var, xls_row_info, _, _ = read_variant_scores(enz_var, preferred_stereoisomer, \
-            baseline_dGs=baseline_dGs, baseline_partition_function=baseline_partition_function, \
-            temperature=temperature, remove_redundant_decoys=args.remove_redundant_decoys)
+    for enz_var in filter(lambda x: x != baseline_variant and os.path.isdir(os.path.join(args.directory, x)) \
+                and x.startswith(pdb + "_"), sorted(os.listdir(args.directory))):
+        xls_row_info, _, _ = read_variant_scores(os.path.join(args.directory, enz_var), preferred_stereoisomer, \
+                baseline_dGs=baseline_dGs, baseline_partition_function=baseline_partition_function, \
+                temperature=temperature, remove_redundant_decoys=args.remove_redundant_decoys)
         scores_dict[enz_var] = xls_row_info
     suffix = "_" + stereoisomers[preferred_stereoisomer]
     if args.rank_fitness:
@@ -488,6 +489,6 @@ if __name__ == "__main__":
         scores_dict = dict(sorted(scores_dict.items(), key=lambda x: x[1][i_fitness]))
     for row, enz_var_xls_row_info in enumerate(scores_dict.items()):
         enz_var, xls_row_info = enz_var_xls_row_info
-        write_xls_row(row + 1, enz_var, xls_row_info, sum_sheets, scores_sheets, ts_sheets, \
+        write_xls_row(row + 2, enz_var, xls_row_info, sum_sheets, scores_sheets, ts_sheets, \
             green_style, orange_style)
     workbook.save(pdb + suffix + ".xls")
