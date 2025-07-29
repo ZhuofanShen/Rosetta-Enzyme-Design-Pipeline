@@ -35,14 +35,14 @@ for pdb in filter(lambda x: os.path.isfile(os.path.join(dir, x, "main")) \
     variants += 1
     for open_coordination_site in ["distal", "proximal"]:
         pdb_sub_path = os.path.join(dir, pdb, substrate + "_" + open_coordination_site)
-        if not os.path.isdir(pdb_sub_path) or os.path.isdir(pdb_sub_path + "/" + pdb + "_FastDesign"):
+        if not os.path.isdir(pdb_sub_path) or os.path.isdir(pdb_sub_path + "/FastDesign"):
             continue
         jobs += 1
-        os.mkdir(pdb_sub_path + "/" + pdb + "_FastDesign")
+        os.mkdir(pdb_sub_path + "/FastDesign")
         for stereo in ["1R2S"]: # for stereo in ["1R2R", "1S2S", "1R2S", "1S2R"]:
             for rot in range(1, 5):
                 for ester in ["+", "-"]:
-                    complex_sub_path = pdb_sub_path + "/" + pdb + "_FastDesign/" + pdb + "_" + stereo + "-rot" + str(rot) + ester
+                    complex_sub_path = pdb_sub_path + "/FastDesign/" + pdb + "_" + stereo + "-rot" + str(rot) + ester
                     os.mkdir(complex_sub_path)
                     stereo_abbrv = stereo[1] + stereo[3]
                     chi2 = config_chi2_dict[stereo + ester]
