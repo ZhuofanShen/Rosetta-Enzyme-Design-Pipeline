@@ -19,13 +19,16 @@ distal_side_nitrogen_order = ["N1", "N2", "N3", "N4"]
 proximal_side_nitrogen_order = ["N1", "N4", "N3", "N2"]
 for pdb in filter(lambda x: os.path.isfile(os.path.join(dir, x, x + "_relaxed.pdb")) \
         and (not fold or os.path.isfile(os.path.join(dir, x, fold + ".fold"))) \
-        and os.path.isfile(os.path.join(dir, x, "main")), os.listdir(dir)):
+        , os.listdir(dir)): # and os.path.isfile(os.path.join(dir, x, "main"))
     try:
         link_lines = list()
         ssbond_lines = list()
+        remark666_lines = list()
         with open(os.path.join(dir, pdb, pdb + "_relaxed.pdb"), "r") as ppdb:
             for line in ppdb:
-                if line.startswith("LINK"):
+                if line.startswith("REMARK 666 MATCH "):
+                    remark666_lines.append(line)
+                elif line.startswith("LINK"):
                     link_lines.append(line)
                 elif line.startswith("SSBOND"):
                     ssbond_lines.append(line)
@@ -34,6 +37,12 @@ for pdb in filter(lambda x: os.path.isfile(os.path.join(dir, x, x + "_relaxed.pd
         with open(os.path.join(dir, pdb, pdb + ".out"), "r") as pf:
             lines = pf.readlines()
         heme = lines[2].strip("\n").split(" ")
+        if heme[0].startswith("HE"):
+            heme_nitrogen_atoms = ["NA", "NB", "NC", "ND"]
+        elif heme[0] == "WUP":
+            heme_nitrogen_atoms = ["N1", "N2", "N3", "N4"]
+        else:
+            raise Exception("Unknown porphyrin type.")
         if len(lines) == 5:
             line_index = [3, 4]
         elif len(lines) == 4:
@@ -84,13 +93,13 @@ for pdb in filter(lambda x: os.path.isfile(os.path.join(dir, x, x + "_relaxed.pd
                     cmd.create(obj, stereo)
                     cmd.alter(obj, "resi='" + str(pdb_index) + "'")
                     cmd.pair_fit("/" + obj + "//X/" + str(pdb_index) + "/" + nitrogen_order[0-rot], \
-                                "/" + pdb + "//" + heme[1] + "/" + heme[2] + "/NA", \
+                                "/" + pdb + "//" + heme[1] + "/" + heme[2] + "/" + heme_nitrogen_atoms[0], \
                             "/" + obj + "//X/" + str(pdb_index) + "/" + nitrogen_order[1-rot], \
-                            "/" + pdb + "//" + heme[1] + "/" + heme[2] + "/NB", \
+                            "/" + pdb + "//" + heme[1] + "/" + heme[2] + "/" + heme_nitrogen_atoms[1], \
                             "/" + obj + "//X/" + str(pdb_index) + "/" + nitrogen_order[2-rot], \
-                            "/" + pdb + "//" + heme[1] + "/" + heme[2] + "/NC", \
+                            "/" + pdb + "//" + heme[1] + "/" + heme[2] + "/" + heme_nitrogen_atoms[2], \
                             "/" + obj + "//X/" + str(pdb_index) + "/" + nitrogen_order[3-rot], \
-                            "/" + pdb + "//" + heme[1] + "/" + heme[2] + "/ND")
+                            "/" + pdb + "//" + heme[1] + "/" + heme[2] + "/" + heme_nitrogen_atoms[3])
                     ddG_ref_pdb_string += " | " + obj
                     pdb_index += 1
                     obj2 = stereo + str(pdb_index)
@@ -119,6 +128,12 @@ for pdb in filter(lambda x: os.path.isfile(os.path.join(dir, x, x + "_relaxed.pd
                     ppdb.writelines(pdb_lines)
                     ppdb.truncate()
             pdb_index = -1
+            if len(heme[2]) == 3:
+                heme_resi_str = heme[2]
+            elif len(heme[2]) == 2:
+                heme_resi_str = " " + heme[2]
+            elif len(heme[2]) == 1:
+                heme_resi_str = "  " + heme[2]
             for stereo in args.isomers:
                 for rot in range(4):
                     pdb_index += 2
@@ -127,11 +142,14 @@ for pdb in filter(lambda x: os.path.isfile(os.path.join(dir, x, x + "_relaxed.pd
                     pdb_name = os.path.join(pdb_sub_path, "complexes", pdb + \
                             "_1" + stereo[0] + "2" + stereo[1] + "-rot" + str(rot + 1) + ".pdb")
                     cmd.save(pdb_name, pdb + " | " + obj)
-                    if len(link_lines) > 0 or len(ssbond_lines) > 0:
+                    if len(remark666_lines) > 0 or len(link_lines) > 0 or len(ssbond_lines) > 0:
                         time.sleep(5)
                         with open(pdb_name, "r+") as ppdb:
                             pdb_lines = ppdb.readlines()
                             ppdb.seek(0)
+                            if len(remark666_lines) > 0:
+                                ppdb.writelines(remark666_lines)
+                            ppdb.write("REMARK 666 MATCH TEMPLATE X " + stereo + "    1 MATCH MOTIF " + heme[1] + " " + heme[0] + "  " + heme_resi_str + "  " + str(len(remark666_lines) + 1) + "  1               \n")
                             if len(ssbond_lines) > 0:
                                 ppdb.writelines(ssbond_lines)
                             if len(link_lines) > 0:
