@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH --partition=main           # Partition (job queue)
+#SBATCH --job-name monitoring      # Assign a name to the job
+#SBATCH --nodes=1                  # Number of nodes
+#SBATCH --ntasks=1                 # Number of tasks (usually = cores) on each node
+#SBATCH --mem=2000                 # Real memory required (MB)
+#SBATCH --time=3-00:00:00          # Total run time limit (HH:MM:SS)
+#SBATCH --output=slurm.%N.%j.out   # STDOUT output file
+#SBATCH --error=slurm.%N.%j.out    # STDERR output file
+#SBATCH --export=ALL               # Export you current env to the job env
+
+
+
+for path in `ls HEM/*/cyclopropanation_styrene_EDA_*/FastDesign_Relax/*_1*2*-rot*/*/screening.sh`; do
+    cd ${path%/*};
+    while [ $(squeue -u zs251 | wc -l) -ge 500 ]; do
+    sleep 120;
+    done;
+    bash ${path##*/};
+    sleep 0.01;
+    cd ../../../../../..;
+done
