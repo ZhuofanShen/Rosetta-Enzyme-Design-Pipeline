@@ -83,8 +83,8 @@ if __name__ == "__main__":
 
     for pdb in os.listdir(args.directory):
         pdb_path = os.path.join(args.directory, pdb)
-        for pdb_chain_ligand in filter(lambda x: x.startswith(pdb) and os.path.isdir(\
-                os.path.join(pdb_path, x)), os.listdir(pdb_path)):
+        for pdb_chain_ligand in filter(lambda x: x.startswith(pdb) and x.endswith(args.ligand) and \
+                os.path.isdir(os.path.join(pdb_path, x)), os.listdir(pdb_path)):
             pdb_chain, uaa_nucleophile = pdb_chain_ligand.split("_")
             with open(os.path.join("pdb" + pdb_path[3:], pdb_chain + ".pdb"), "r") as pf:
                 xtal_pdb_lines = pf.readlines()
@@ -100,7 +100,7 @@ if __name__ == "__main__":
                 no_nucleophile_chain = chains[0] # dimer, staple across two chains
             pdb_ligand_path = os.path.join(pdb_path, pdb_chain_ligand)
             if args.option == "csv" or args.option == "mpnn" or args.option == "mpnnall":
-                df_list = [pd.DataFrame({c: pd.Series(dtype=t) for c, t in {"variant": "str", "ddG": "float", "xlink": "float", "xlink_cst": "float", "mutations": "str"}.items()})]
+                df_list = list()
             for variant in filter(lambda x: os.path.isdir(os.path.join(pdb_ligand_path, x)) and x.startswith(pdb_chain), os.listdir(pdb_ligand_path)):
                 if_process_current_variant_anyway = False
                 if len(args.process_variants) > 0:
@@ -144,24 +144,24 @@ if __name__ == "__main__":
                 lowest_fasc = None
                 for fasc in fasc_list:
                     path = fasc[:fasc.rfind("/")]
-                    wt_total_score = 0
-                    wt_unbound_total_score = 0
                     wt_fasc = os.path.join(path, pdb_chain + "_apo.sc")
-                    if args.ddg_bind and os.path.isfile(wt_fasc):
+                    if os.path.isfile(wt_fasc):
                         wt_score_dict = read_scores_from_fasc(wt_fasc)[0]
                         wt_total_score = wt_score_dict["total_score"] - wt_score_dict["coordinate_constraint"]
+                        wt_unbound_total_score = 0
                         wt_unbound_fasc = os.path.join(path, pdb_chain + "-unbound_apo.sc")
-                        if os.path.isfile(wt_unbound_fasc):
+                        if args.ddg_bind and os.path.isfile(wt_unbound_fasc):
                             wt_unbound_score_dict = read_scores_from_fasc(wt_unbound_fasc)[0]
                             wt_unbound_total_score = wt_unbound_score_dict["total_score"] - wt_unbound_score_dict["coordinate_constraint"]
                     dG_bind_wt = wt_total_score - wt_unbound_total_score
-                    unbound_total_score = 0
-                    unbound_fasc = fasc[:-3] + "-unbound.sc"
-                    if os.path.isfile(unbound_fasc):
-                        unbound_score_dict = read_scores_from_fasc(unbound_fasc)[0]
-                        unbound_total_score = unbound_score_dict["total_score"] - unbound_score_dict["coordinate_constraint"]
-                    score_dict = read_scores_from_fasc(fasc, n=args.read_n_decoys)[0]
-                    total_score = score_dict["total_score"] - score_dict["coordinate_constraint"]
+                    if os.path.isfile(fasc):
+                        score_dict = read_scores_from_fasc(fasc, n=args.read_n_decoys)[0]
+                        total_score = score_dict["total_score"] - score_dict["coordinate_constraint"]
+                        unbound_total_score = 0
+                        unbound_fasc = fasc[:-3] + "-unbound.sc"
+                        if args.ddg_bind and os.path.isfile(unbound_fasc):
+                            unbound_score_dict = read_scores_from_fasc(unbound_fasc)[0]
+                            unbound_total_score = unbound_score_dict["total_score"] - unbound_score_dict["coordinate_constraint"]
                     dG_bind_mut = total_score - unbound_total_score
                     ddg = dG_bind_mut - dG_bind_wt
                     # ddg = (score_dict["total_score"] - score_dict["coordinate_constraint"]) - wt_total_score
@@ -174,8 +174,8 @@ if __name__ == "__main__":
                             (args.step == "design" and residue_energy < 3 and residue_cst_score < 3):
                         pass_threshold = True
                         if args.option == "csv" or args.option == "mpnn" or args.option == "mpnnall":
-                            var_dict = {"variant": [variant_pdb_numbering], "ddG": [ddg], \
-                                    "xlink": [residue_energy], "xlink_cst": [residue_cst_score]}
+                            var_dict = {"variant": [variant_pdb_numbering], "ddG": [round(ddg, 2)], \
+                                    "xlink": [round(residue_energy, 2)], "xlink_cst": [round(residue_cst_score, 2)]}
                             if args.step == "relax":
                                 pseudo_wt_pose = pose_from_pdb(os.path.join(variant_path, variant_pdb))
                                 pseudo_wt_sequence = pseudo_wt_pose.sequence()
@@ -443,6 +443,8 @@ if __name__ == "__main__":
                     new_im.save(os.path.join(pdb_ligand_path, variant_pdb_numbering + ".png"))
                 # break
             if args.option == "csv" or args.option == "mpnn" or args.option == "mpnnall":
+                df_list = list(sorted(df_list, key=lambda var_dict: var_dict["ddG"][0]))
+                df_list.insert(0, pd.DataFrame({c: pd.Series(dtype=t) for c, t in {"variant": "str", "ddG": "float", "xlink": "float", "xlink_cst": "float", "mutations": "str"}.items()}))
                 df = pd.concat(df_list, sort=False)
                 df.to_csv(os.path.join(pdb_ligand_path, pdb_chain_ligand + "." + args.step + ".csv"))
             # break
