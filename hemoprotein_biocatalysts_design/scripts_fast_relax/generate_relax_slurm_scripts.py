@@ -53,8 +53,8 @@ for stereo in ["1R2R", "1S2S", "1R2S", "1S2R"]:
                 elif substrate_path.endswith("cyclopropanation_17_EDA"):
                     if stereo_abbrv in ["RR", "SS"]:
                         chi6 = " " + stereo_abbrv + "T,7,57,303"
-                    # elif stereo_abbrv in ["RS", "SR"]:
-                    #     chi6 = " " + stereo_abbrv + "T,7,57,303"
+                    elif stereo_abbrv in ["RS", "SR"]:
+                        chi6 = " " + stereo_abbrv + "T,5,0,180"
                 elif substrate_path.endswith("cyclopropanation_23_EDA"):
                     if stereo_abbrv == "RR":
                         chi6 = " " + stereo_abbrv + "T,5,133,253"
