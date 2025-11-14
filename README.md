@@ -32,7 +32,7 @@ This pipeline wraps commonly used Rosetta enzyme‑design steps into a practical
 1. **Design around a bound substrate/ligand** using enzyme‑design constraints (the “EnzDes” application family in Rosetta). 
 2. **Systematic mutational exploration** (single or combinatorial) with local packing/minimization and optional sequence design.
 
-Where helpful, it also accommodates the classic **Match → Design (FastDesign)** pattern: use Rosetta **Match** to place catalytic geometries (the “theozyme”) on a scaffold, then redesign around the placed geometry with **FastDesign**.
+Where helpful, it also accommodates the classic **Dock → Design** pattern: use **RosettaMatch** or other docking practices to place catalytic geometries (the “theozyme”) on a scaffold, then redesign around the placed geometry with **FastDesign** or **LigandMPNN**.
 
 ---
 
@@ -48,23 +48,25 @@ Where helpful, it also accommodates the classic **Match → Design (FastDesign)*
 
 ## Repository Layout
 Rosetta-Enzyme-Design-Pipeline/
+
 ├─ enzdes_utils/ # Core PyRosetta utilities, exposes the main entry point (enzdes_utils.py)
+
 ├─ hemoprotein_biocatalysts_design/ # Example project: heme protein design (inputs, scripts)
+
 ├─ protein_stapling/ # Example project: staple/design utilities (inputs, scripts)
+
 └─ README.md
 
-
-Directory names as above are from the repository root. Feel free to extend with more “recipe” folders. :contentReference[oaicite:5]{index=5}
 
 ---
 
 ## Requirements
 
-- **Python 3.8+** (tested with modern 3.x)
-- **PyRosetta 4** (download & install from the official site; see below). :contentReference[oaicite:6]{index=6}
-- **Rosetta command‑line tools (optional)** if you plan to run **Match** externally or mix in RosettaScripts XML flows. :contentReference[oaicite:7]{index=7}
+- **Python 3.8+** (tested with modern 3.11)
+- **PyRosetta 4** (download & install from the official site; see below).
+- **Rosetta command‑line tools (optional)** if you plan to run **Match** externally or mix in RosettaScripts XML flows.
 
-> **Note on PyRosetta**: PyRosetta is distributed as licensed wheels/tarballs. Install from the official PyRosetta website following their instructions (Windows/macOS/Linux guidance provided). :contentReference[oaicite:8]{index=8}
+> **Note on PyRosetta**: PyRosetta is distributed as licensed wheels/tarballs. Install from the official PyRosetta website following their instructions (Windows/macOS/Linux guidance provided).
 
 ---
 
@@ -81,18 +83,18 @@ Directory names as above are from the repository root. Feel free to extend with 
 
 ## Prepare Your Inputs
 
-Ligand params & conformers
+1. **Protein-substrate complex structures**
 
-Generate a ligand .params file (and optional rotamer library PDB) with molfile_to_params.py from Rosetta/PyRosetta tooling. Use -in:file:extra_res_fa to load the params at run time. 
-Rosetta Commons
-+2
-Rosetta Commons
-+2
+Dock the substrate/TS into the protein active site using selected docking software or RosettaMatch, or simply overlay the TS onto the cofactor. The `enzdes_utils.py` script can explicitly consider substrate/TS isomers and conformers by loading a cloud PDB file following a specific format.
 
-Enzyme‑design constraints
+2. **Ligand params & conformers**
 
-Prepare an enzyme‑design .cst (match/enzdes geometric constraint) file that encodes desired catalytic geometries/distances/angles. 
-Rosetta Commons
+Generate a ligand .params file (and optional rotamer library PDB) with molfile_to_params.py from Rosetta/PyRosetta tooling. Use --parameters_files to load the params at run time. 
+
+3. **Enzyme‑design constraints**
+
+Recommended: Use --distance/angle/dihedral_constraint_atoms along with --distance/angle/dihedral_constraint_parameters to define desired catalytic geometries, i.e., distances/angles/dihedrals.
+Alternative: Prepare an enzyme‑design .cst (Match/EnzDes geometric constraint) file that encodes desired catalytic geometries.
 
 Rosetta’s official docs provide short, practical tutorials on preparing ligands and constraints.
 
@@ -135,16 +137,15 @@ Applies the requested point mutations (single or multiple).
 
 Runs a pack/minimize/design cycle around the active site.
 
-Writes designed models and a score table into results/ with a filename prefix "run_01".
+Writes designed models and a score table into `results/` with a filename prefix "run_01".
 
 ## Typical Workflows
 1) De novo active‑site placement → design
 
 Match: Place catalytic residues and the ligand geometry on a scaffold using Rosetta Match with your .cst file. 
-Rosetta Commons
+Rosetta 
 
 Design: Use this pipeline (or Rosetta FastDesign/RosettaScripts) to optimize sequences and side chains around the placed theozyme. 
-Rosetta Commons
 
 2) Mutational scanning around a known active site
 
@@ -157,7 +158,6 @@ For each variant, the script repacks/minimizes locally and scores; output is a t
 Load ligand .params and a .cst describing catalytic geometry.
 
 Run design cycles to improve binding and geometry compliance (e.g., constraint scores). 
-Rosetta Commons
 
 ## Inputs & Outputs
 
@@ -166,10 +166,8 @@ Inputs
 PDB: protein (optionally with ligand already placed).
 
 Ligand .params and (optionally) conformer PDB library. 
-Rosetta Commons
 
 .cst file: enzyme‑design / matcher constraints. 
-Rosetta Commons
 
 Mutation list and/or resfile (if your build supports it).
 
@@ -187,22 +185,16 @@ run `enzdes_utils.py` with an additional flag --debug_mode.
 ## Citations
 
 Rosetta Enzyme Design (EnzDes) docs — overview and usage. 
-Rosetta Commons
 
 Rosetta Match — place catalytic geometries (theozyme) on scaffolds. 
-Rosetta Commons
 
 Constraint (.cst) file format — match/enzdes geometric constraints. 
-Rosetta Commons
 
 Ligand preparation — generating .params with molfile_to_params.py. 
-Rosetta Commons
 
 PyRosetta installation — official guidance & platform notes. 
-PyRosetta
 
 Background reading: Richter et al. “De Novo Enzyme Design Using Rosetta3.” Protein Sci. (2011). 
-PMC
 
 ## License
 
