@@ -2,6 +2,7 @@ import argparse
 import json
 import math
 import os
+import shlex
 import shutil
 import xlwt
 
@@ -385,6 +386,7 @@ def write_xls_row(row, enz_var, xls_row_info, sum_sheets, scores_sheets, ts_shee
     sum_sheets[1].write(row, 5, xls_row_info[77])
     sum_sheets[1].write(row, 6, xls_row_info[78])
     sum_sheets[1].write(row, 7, xls_row_info[79])
+    sum_sheets[1].write(row, 7, xls_row_info[-1])
 
     # sum_sheets[2].write(row, 1, xls_row_info[80])
     # sum_sheets[2].write(row, 2, xls_row_info[81])
@@ -463,11 +465,23 @@ if __name__ == "__main__":
         for substrate_position in ["_distal", "_proximal"]:
             relax_path = os.path.join(args.directory, pdb, args.substrate + substrate_position, args.relax_folder)
             if os.path.isdir(relax_path):
+                relax_script = os.path.join(relax_path, "run_generate_relax_slurm_scripts.sh")
+                if os.path.isfile(relax_script):
+                    with open(relax_script, "r") as pf:
+                        tokens = shlex.split(pf.read())
+                    if "-muts" not in tokens:
+                        continue
+                    idx = tokens.index("-muts") + 1
+                    muts = []
+                    while idx < len(tokens) and not tokens[idx].startswith("-"):
+                        muts.append(tokens[idx])
+                        idx += 1
+                    muts_formatted = "_".join([mut.replace(",", "") for mut in muts])
                 for enz_var in filter(lambda x: os.path.isdir(os.path.join(relax_path, x)) and x.startswith(pdb + "_"), \
                             sorted(os.listdir(relax_path))):
                     xls_row_info, _, _ = read_variant_scores(os.path.join(relax_path, enz_var), preferred_stereoisomer, \
                             temperature=temperature, remove_redundant_decoys=args.remove_redundant_decoys)
-                    scores_dict[enz_var] = xls_row_info
+                    scores_dict[enz_var] = xls_row_info + [muts_formatted]
     suffix = "_" + stereoisomers[preferred_stereoisomer]
     if args.rank_fitness:
         if args.rank_fitness == "m":
