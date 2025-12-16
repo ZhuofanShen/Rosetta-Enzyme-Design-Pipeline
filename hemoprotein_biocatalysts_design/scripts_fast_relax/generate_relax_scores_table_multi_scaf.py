@@ -379,6 +379,9 @@ def write_xls_row(row, enz_var, xls_row_info, sum_sheets, scores_sheets, ts_shee
         sum_sheets[0].write(row, 4, round(xls_row_info[54], 2), orange_style)
         sum_sheets[0].write(row, 5, round(xls_row_info[72], 2), green_style)
 
+    if type(xls_row_info[-1]) == str:
+        sum_sheets[0].write(row, 6, xls_row_info[-1])
+
     sum_sheets[1].write(row, 1, xls_row_info[73])
     sum_sheets[1].write(row, 2, xls_row_info[74])
     sum_sheets[1].write(row, 3, xls_row_info[75])
@@ -386,7 +389,6 @@ def write_xls_row(row, enz_var, xls_row_info, sum_sheets, scores_sheets, ts_shee
     sum_sheets[1].write(row, 5, xls_row_info[77])
     sum_sheets[1].write(row, 6, xls_row_info[78])
     sum_sheets[1].write(row, 7, xls_row_info[79])
-    sum_sheets[1].write(row, 8, xls_row_info[-1])
 
     # sum_sheets[2].write(row, 1, xls_row_info[80])
     # sum_sheets[2].write(row, 2, xls_row_info[81])
