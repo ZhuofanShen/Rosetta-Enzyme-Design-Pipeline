@@ -43,9 +43,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('csv', type=str)
     parser.add_argument('-d', '--directory', type=str, default="HEM")
+    parser.add_argument("-sub", "--substrate", type=str, default="substrates/cyclopropanation_styrene_EDA")
     parser.add_argument('-s', '--preferred_stereoisomer', type=int, choices=[0, 1, 2, 3], default=2)
     parser.add_argument('-th', '--threshold', type=float, default=0)
     args = parser.parse_args()
+    
+    args.substrate = args.substrate.strip("/")
+    substrate = args.substrate.split("/")[-1]
 
     columns = ["PDB_ID", "WT"]
     stereoisomer = ["RR", "SS", "RS", "SR"][args.preferred_stereoisomer]
@@ -75,7 +79,7 @@ if __name__ == '__main__':
             elif isomer[3] == "m":
                 ester = "-"
             isomer = "1" + isomer[0] + "2" + isomer[1] + "-rot" + isomer[2] + ester
-            design_traj_path = args.directory + "/" + pdb + "/cyclopropanation_styrene_EDA_proximal/FastDesign/" + pdb + "_" + isomer
+            design_traj_path = args.directory + "/" + pdb + "/" + substrate + "_proximal/FastDesign/" + pdb + "_" + isomer
             if_proximal = False
             if os.path.isdir(design_traj_path):
                 for design_traj_pdb in os.listdir(design_traj_path):
@@ -94,12 +98,12 @@ if __name__ == '__main__':
                         mutations = " -muts " + " ".join(mutations)
                     else:
                         mutations = ""
-                    relax_path = args.directory + "/" + pdb + "/cyclopropanation_styrene_EDA_proximal/FastDesign_Relax"
+                    relax_path = args.directory + "/" + pdb + "/" + substrate + "_proximal/FastDesign_Relax"
                     if not os.path.isdir(relax_path):
                         os.mkdir(relax_path)
                     with open(relax_path + "/run_generate_relax_slurm_scripts.sh", "a") as pf:
-                        pf.write("python ../../../../scripts/generate_relax_slurm_scripts.py " + pdb + "_" + isomer + " -sub ../../../../substrates/cyclopropanation_styrene_EDA" + mutations + " -script screening -n 5 -t 8\n")
-            design_traj_path = args.directory + "/" + pdb + "/cyclopropanation_styrene_EDA_distal/FastDesign/" + pdb + "_" + isomer
+                        pf.write("python ../../../../scripts/generate_relax_slurm_scripts.py " + pdb + "_" + isomer + " -sub ../../../../" + args.substrate + mutations + " -script screening -n 5 -t 8\n")
+            design_traj_path = args.directory + "/" + pdb + "/" + substrate + "_distal/FastDesign/" + pdb + "_" + isomer
             if_distal = False
             if os.path.isdir(design_traj_path):
                 for design_traj_pdb in os.listdir(design_traj_path):
@@ -118,11 +122,11 @@ if __name__ == '__main__':
                         mutations = " -muts " + " ".join(mutations)
                     else:
                         mutations = ""
-                    relax_path = args.directory + "/" + pdb + "/cyclopropanation_styrene_EDA_distal/FastDesign_Relax"
+                    relax_path = args.directory + "/" + pdb + "/" + substrate + "_distal/FastDesign_Relax"
                     if not os.path.isdir(relax_path):
                         os.mkdir(relax_path)
                     with open(relax_path + "/run_generate_relax_slurm_scripts.sh", "a") as pf:
-                        pf.write("python ../../../../scripts/generate_relax_slurm_scripts.py " + pdb + "_" + isomer + " -sub ../../../../substrates/cyclopropanation_styrene_EDA" + mutations + " -script screening -n 5 -t 8\n")
+                        pf.write("python ../../../../scripts/generate_relax_slurm_scripts.py " + pdb + "_" + isomer + " -sub ../../../../" + args.substrate + mutations + " -script screening -n 5 -t 8\n")
             if if_proximal and if_distal:
                 with open(args.directory + ".log", "a") as pf:
                     pf.write(pdb + "_" + isomer + "\n")
