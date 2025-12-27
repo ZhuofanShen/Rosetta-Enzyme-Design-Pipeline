@@ -1,4 +1,5 @@
 # Rosetta Enzyme Design Pipeline
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18067261.svg)](https://doi.org/10.5281/zenodo.18067261)
 
 A Rosetta/PyRosetta–based workflow for designing and optimizing enzyme active sites.
 
