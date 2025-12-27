@@ -1,3 +1,4 @@
+```bash
 sbatch scripts-match/generate_uaa_position_files.yCD.pbs
 
 sbatch scripts-match/generate_uaa_position_files.antibody.pbs
@@ -46,3 +47,4 @@ python scripts-design/mpnn_2_fast_relax.py outyCD --process_variants 1ysb-A_D132
 sbatch scripts-design/relax.pbs outyCD mpnn_30 relax.sh
 
 sbatch scripts-design/relax.pbs outyCD mpnn_30 relax_WT.sh
+```
