@@ -28,7 +28,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("directory", type=str)
 parser.add_argument("-f", "--fold", type=str)
 parser.add_argument(
-    "-sub", "--substrate", type="str",
+    "-sub", "--substrate", type=str,
     default="substrates/cyclopropanation_styrene_EDA"
 )
 parser.add_argument(
