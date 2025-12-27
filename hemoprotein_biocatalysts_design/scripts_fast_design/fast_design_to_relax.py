@@ -44,7 +44,7 @@ if __name__ == '__main__':
     parser.add_argument('csv', type=str)
     parser.add_argument('-d', '--directory', type=str, default="HEM")
     parser.add_argument("-sub", "--substrate", type=str, default="substrates/cyclopropanation_styrene_EDA")
-    parser.add_argument('-s', '--preferred_stereoisomer', type=int, choices=[0, 1, 2, 3], default=2)
+    parser.add_argument('-stereo', '--preferred_stereoisomer', type=int, choices=[0, 1, 2, 3], default=2)
     parser.add_argument('-th', '--threshold', type=float, default=0)
     args = parser.parse_args()
     
