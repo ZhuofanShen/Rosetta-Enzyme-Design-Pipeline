@@ -399,7 +399,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--directory", type=str, default=".")
     parser.add_argument("-baseline", "--baseline_variant_path", type=str)
-    parser.add_argument("-s", "--preferred_stereoisomer", type=int, choices=[0, 1, 2, 3])
+    parser.add_argument("-stereo", "--preferred_stereoisomer", type=int, choices=[0, 1, 2, 3])
     parser.add_argument("-t", "--temperature", type=float, default=3)
     parser.add_argument("-rank", "--rank_fitness", type=str, choices=["m", "p", "f", "b", "s", "e", "d"])
     parser.add_argument("-rm", "--remove_redundant_decoys", action="store_true")
