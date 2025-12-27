@@ -35,7 +35,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.step == 1:
         for pdb in os.listdir(args.dir):
-            if os.path.isfile(args.dir + '/' + pdb + '/' + pdb + '_relax.pdb'):
+            if os.path.isfile(args.dir + '/' + pdb + '/' + pdb + '_relaxed.pdb'):
                 continue
             #1
             if os.path.isdir(args.dir + '/' + pdb + '/relax1'):
@@ -68,10 +68,10 @@ if __name__ == "__main__":
                 continue
             #compare
             if score1 <= score2 and score1 != 100000000 and score2 != 100000000:
-                shutil.copy(args.dir + '/' + pdb + '/relax1/' + name1, args.dir + '/' + pdb + '/' + pdb + '_relax.pdb')
+                shutil.copy(args.dir + '/' + pdb + '/relax1/' + name1, args.dir + '/' + pdb + '/' + pdb + '_relaxed.pdb')
             else:
-                shutil.copy(args.dir + '/' + pdb + '/relax2/' + name2, args.dir + '/' + pdb + '/' + pdb + '_relax.pdb')
-    else:
+                shutil.copy(args.dir + '/' + pdb + '/relax2/' + name2, args.dir + '/' + pdb + '/' + pdb + '_relaxed.pdb')
+    elif args.step == 2:
         pr = args.dir.split("_")[0]
         scores = read_scores_from_fasc(args.dir + '/' + pr)
         if scores:
