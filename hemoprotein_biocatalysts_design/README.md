@@ -1,4 +1,5 @@
-# Rosetta Enzyme Design Pipeline
+# Hemoprotein Biocatalysts Design
+The official GitHub repository for the Nature Communications paper "Computational Design of Generalist Cyclopropanases with Stereodivergent Selectivity".
 
 This repository implements a **Rosetta / PyRosetta–based enzyme design workflow** developed for **heme-dependent biocatalysts**, with a focus on:
 
@@ -92,7 +93,7 @@ hemoprotein_biocatalysts_design/
 **1.3 WT pre-relaxation**
 
 Submit Slurm jobs:
-`sbatch scripts/relax_raw_WT_pdb.pbs`
+`sbatch scripts/fast_relax_raw_WT_pdb.pbs`
 
 After all jobs finish, select the best relaxed WT structure:
 `python scripts/get_best_relaxed_decoy.py HEM_monomer -s 1`
@@ -154,17 +155,10 @@ If `-f/--fold` is omitted, the default script name is default.sh.
 
 Execute all generated scripts:
 
-```bash
-for path in `ls HEM/*/cyclopropanation_styrene_EDA_*/*_FastDesign/*rot*/DIOXYGENASE.sh`; do
-    cd ${path%/*}
-    bash ${path##*/}
-    sleep 0.01
-    cd ../../../../..
-done
-```
+`sbatch scripts/fast_design.pbs`
 
 After all jobs finish, collect design scores:
-```python
+```bash
 python scripts/generate_design_scores_table.py \
     HEM \
     -fold DIOXYGENASE \
@@ -202,7 +196,7 @@ sbatch fast_design_relax.pbs
 ```
 
 After all relax jobs complete:
-```python
+```bash
 python scripts/generate_relax_scores_table_multi_scaf.py \
     HEM \
     -stereo 2 \
@@ -283,8 +277,7 @@ python ../../../../scripts/generate_relax_slurm_scripts.py \
 
 Submit jobs:
 
-sbatch fast_relax_6M8F.pbs
-
+`sbatch fast_relax_6M8F.pbs`
 
 Analyze results:
 ```bash
@@ -294,7 +287,7 @@ python ../../../../scripts/generate_relax_scores_table.py \
 ```
 
 Restart MSD from a selected variant:
-```python
+```bash
 python ../../../../scripts/get_best_relaxed_decoys.py \
     6F0A_C129A_S167V_R231L \
     -s 2
