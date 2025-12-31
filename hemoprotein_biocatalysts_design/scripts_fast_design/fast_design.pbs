@@ -1,0 +1,17 @@
+#!/bin/bash
+#SBATCH --partition=main           # Partition (job queue)
+#SBATCH --job-name monitoring      # Assign a name to the job
+#SBATCH --nodes=1                  # Number of nodes
+#SBATCH --ntasks=1                 # Number of tasks (usually = cores) on each node
+#SBATCH --mem=200                 # Real memory required (MB)
+#SBATCH --time=3-00:00:00          # Total run time limit (HH:MM:SS)
+#SBATCH --output=slurm.%N.%j.out   # STDOUT output file
+#SBATCH --error=slurm.%N.%j.out    # STDERR output file
+#SBATCH --export=ALL               # Export you current env to the job env
+
+for path in `ls HEM/*/cyclopropanation_styrene_EDA_*/FastDesign/*rot*/DIOXYGENASE.sh`; do
+    cd ${path%/*};
+    bash ${path##*/};
+    sleep 0.01;
+    cd ../../../../..;
+done
