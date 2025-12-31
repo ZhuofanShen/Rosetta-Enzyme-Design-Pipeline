@@ -47,8 +47,28 @@ This step:
 
 Cleans raw PDB files
 
-Standardizes atom naming
 Classifies hemoproteins into fold families
+
+Read heme PDB numbering and coordination site information from PDB REMARK lines and write it into `${PDB_ID}.out`
+
+The `${PDB_ID}.out` file, for example, `6F0A.out`, contains the following information:
+```text
+SYMMETRIC MONOMERIC
+A
+HEM A 503
+HIS A 346 NE2 PROXIMAL
+C82 A 501 N1 VOID
+```
+
+Line 1 specifies whether the protein is symmetric or asymmetric and whether it is monomeric or multimeric.
+Monomeric proteins are always denoted as symmetric.
+
+Line 2 lists all protein chains that belong to a single biological assembly.
+
+Line 3 gives the three-letter residue name, chain ID, and residue index of the heme cofactor.
+
+Line 4, and optionally Line 5, give(s) the three-letter residue name, chain ID, and residue index of the axial ligand(s) coordinating the heme cofactor.
+The keyword `PROXIMAL` or `DISTAL` in Line 4 instructs `generate_hemoprotein_substrate_complexes.py` (in step 2) which side of the heme cofactor binds to the axial residue, so that the other side should be used to superimpose TS structures. You may also manually clean the raw PDB file, save it as `${PDB_ID}_clean.pdb`, and manually generate a `${PDB_ID}.out` file instead of running this step.
 
 **1.2 Resulting directory structure**
 ```text
@@ -61,7 +81,9 @@ hemoprotein_biocatalysts_design/
 ├── HEC_monomer/
 ├── HEM_monomer/
 │   └── ${PDB_ID}/
+│       ├── ${PDB_ID}.pdb
 │       ├── ${PDB_ID}_clean.pdb
+│       ├── ${PDB_ID}.out
 │       └── DIOXYGENASE.fold
 ├── HEM_homo-oligomer/
 ├── HEM_hetero-oligomer_mono-heme/
@@ -81,7 +103,9 @@ Final WT structure layout:
 ```text
 HEM_monomer/
 └── ${PDB_ID}/
+    ├── ${PDB_ID}.pdb
     ├── ${PDB_ID}_clean.pdb
+    ├── ${PDB_ID}.out
     ├── ${PDB_ID}_relaxed.pdb
     └── DIOXYGENASE.fold
 ```
@@ -102,8 +126,10 @@ Output:
 ```text
 HEM/
 └── ${PDB_ID}/
+    ├── ${PDB_ID}.pdb
     ├── ${PDB_ID}_clean.pdb
     ├── ${PDB_ID}_relaxed.pdb
+    ├── ${PDB_ID}.out
     ├── DIOXYGENASE.fold
     └── cyclopropanation_styrene_EDA_distal/
         └── complexes/
