@@ -1,6 +1,8 @@
 # Rosetta Enzyme Design Pipeline
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18067261.svg)](https://doi.org/10.5281/zenodo.18067261)
 
+The official GitHub repository for the Nature Communications paper "Computational Design of Generalist Cyclopropanases with Stereodivergent Selectivity".
+
 A Rosetta/PyRosetta–based workflow for designing and optimizing enzyme active sites.
 
 The core of the workflow is a PyRosetta module/script **`enzdes_utils.py`**. All operations—including introducing point mutations and optimizing protein–substrate complexes—are performed by calling this script.  
