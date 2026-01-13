@@ -59,13 +59,16 @@ def read_variant_scores(enz_path, preferred_stereoisomer, baseline_dGs=None, \
     diastereo_negative_state_partition_function = 0
 
     lowest_sc_1r2r = 10000
+    lowest_col_1r2r = 1
     partition_function = 0
     for col_1r2r in range(1, 9):
         if col_1r2r % 2 == 1:
             rot_name = str(int((col_1r2r + 1) / 2)) + '+'
         else:
             rot_name = str(int(col_1r2r / 2)) + '-'
-        enz_scores_1r2r = read_scores_from_fasc(enz_path + "/" + pdb + "_1R2R-rot" + rot_name)
+        enz_scores_1r2r = None
+        if os.path.isdir(enz_path + "/" + pdb + "_1R2R-rot" + rot_name):
+            enz_scores_1r2r = read_scores_from_fasc(enz_path + "/" + pdb + "_1R2R-rot" + rot_name)
         if enz_scores_1r2r:
             lowest_enz_scores_1r2r = extract_n_decoys(enz_scores_1r2r)
             for enz_name_1r2r, enz_score_1r2r in lowest_enz_scores_1r2r.items():
@@ -115,13 +118,16 @@ def read_variant_scores(enz_path, preferred_stereoisomer, baseline_dGs=None, \
         pass
     
     lowest_sc_1s2s = 10000
+    lowest_col_1s2s = 1
     partition_function = 0
     for col_1s2s in range(1, 9):
         if col_1s2s % 2 == 1:
             rot_name = str(int((col_1s2s + 1) / 2)) + '+'
         else:
             rot_name = str(int(col_1s2s / 2)) + '-'
-        enz_scores_1s2s = read_scores_from_fasc(enz_path + "/" + pdb + "_1S2S-rot" + rot_name)
+        enz_scores_1s2s = None
+        if os.path.isdir(enz_path + "/" + pdb + "_1S2S-rot" + rot_name):
+            enz_scores_1s2s = read_scores_from_fasc(enz_path + "/" + pdb + "_1S2S-rot" + rot_name)
         if enz_scores_1s2s:
             lowest_enz_scores_1s2s = extract_n_decoys(enz_scores_1s2s)
             for enz_name_1s2s, enz_score_1s2s in lowest_enz_scores_1s2s.items():
@@ -171,13 +177,16 @@ def read_variant_scores(enz_path, preferred_stereoisomer, baseline_dGs=None, \
         pass
     
     lowest_sc_1r2s = 10000
+    lowest_col_1r2s = 1
     partition_function = 0
     for col_1r2s in range(1, 9):
         if col_1r2s % 2 == 1:
             rot_name = str(int((col_1r2s + 1) / 2)) + '+'
         else:
             rot_name = str(int(col_1r2s / 2)) + '-'
-        enz_scores_1r2s = read_scores_from_fasc(enz_path + "/" + pdb + "_1R2S-rot" + rot_name)
+        enz_scores_1r2s = None
+        if os.path.isdir(enz_path + "/" + pdb + "_1R2S-rot" + rot_name):
+            enz_scores_1r2s = read_scores_from_fasc(enz_path + "/" + pdb + "_1R2S-rot" + rot_name)
         if enz_scores_1r2s:
             lowest_enz_scores_1r2s = extract_n_decoys(enz_scores_1r2s)
             for enz_name_1r2s, enz_score_1r2s in lowest_enz_scores_1r2s.items():
@@ -227,13 +236,16 @@ def read_variant_scores(enz_path, preferred_stereoisomer, baseline_dGs=None, \
         pass
     
     lowest_sc_1s2r = 10000
+    lowest_col_1s2r = 1
     partition_function = 0
     for col_1s2r in range(1, 9):
         if col_1s2r % 2 == 1:
             rot_name = str(int((col_1s2r + 1) / 2)) + '+'
         else:
             rot_name = str(int(col_1s2r / 2)) + '-'
-        enz_scores_1s2r = read_scores_from_fasc(enz_path + "/" + pdb + "_1S2R-rot" + rot_name)
+        enz_scores_1s2r = None
+        if os.path.isdir(enz_path + "/" + pdb + "_1S2R-rot" + rot_name):
+            enz_scores_1s2r = read_scores_from_fasc(enz_path + "/" + pdb + "_1S2R-rot" + rot_name)
         if enz_scores_1s2r:
             lowest_enz_scores_1s2r = extract_n_decoys(enz_scores_1s2r)
             for enz_name_1s2r, enz_score_1s2r in lowest_enz_scores_1s2r.items():
@@ -468,6 +480,7 @@ if __name__ == "__main__":
             relax_path = os.path.join(args.directory, pdb, args.substrate + substrate_position, args.relax_folder)
             if os.path.isdir(relax_path):
                 relax_script = os.path.join(relax_path, "run_generate_relax_slurm_scripts.sh")
+                muts_formatted = str()
                 if os.path.isfile(relax_script):
                     with open(relax_script, "r") as pf:
                         tokens = shlex.split(pf.read())
