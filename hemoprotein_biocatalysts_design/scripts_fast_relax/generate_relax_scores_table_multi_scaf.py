@@ -50,7 +50,7 @@ def read_variant_scores(enz_path, preferred_stereoisomer, baseline_dGs=None, \
                 if not decoy.endswith("_" + str(enz_no) + ".pdb") and \
                         not decoy.endswith('.fasc'):
                     os.remove(enz_path + "/" + pdb + '/' + decoy)
-    elif remove_redundant_decoys:
+    elif remove_redundant_decoys and os.path.isdir(enz_path + "/" + pdb):
         shutil.rmtree(enz_path + "/" + pdb)
         enz_dG_fold = 0
     xls_row_info.append(round(enz_dG_fold, 2)) # [0]
@@ -91,7 +91,7 @@ def read_variant_scores(enz_path, preferred_stereoisomer, baseline_dGs=None, \
                         os.remove(enz_path + "/" + pdb + "_1R2R-rot" + rot_name + '/' + decoy)
         else:
             xls_row_info.append(None) # [1]
-            if remove_redundant_decoys:
+            if remove_redundant_decoys and os.path.isdir(enz_path + "/" + pdb + "_1R2R-rot" + rot_name):
                 shutil.rmtree(enz_path + "/" + pdb + "_1R2R-rot" + rot_name)
         try:
             with open(enz_path + "/" + pdb + "_1R2R-rot" + rot_name + '/' + enz_name_1r2r, 'r') as pf:
@@ -150,7 +150,7 @@ def read_variant_scores(enz_path, preferred_stereoisomer, baseline_dGs=None, \
                         os.remove(enz_path + "/" + pdb + "_1S2S-rot" + rot_name + '/' + decoy)
         else:
             xls_row_info.append(None) # [19]
-            if remove_redundant_decoys:
+            if remove_redundant_decoys and os.path.isdir(enz_path + "/" + pdb + "_1S2S-rot" + rot_name):
                 shutil.rmtree(enz_path + "/" + pdb + "_1S2S-rot" + rot_name)
         try:
             with open(enz_path + "/" + pdb + "_1S2S-rot" + rot_name + '/' + enz_name_1s2s, 'r') as pf:
@@ -209,7 +209,7 @@ def read_variant_scores(enz_path, preferred_stereoisomer, baseline_dGs=None, \
                         os.remove(enz_path + "/" + pdb + "_1R2S-rot" + rot_name + '/' + decoy)
         else:
             xls_row_info.append(None) # [37]
-            if remove_redundant_decoys:
+            if remove_redundant_decoys and os.path.isdir(enz_path + "/" + pdb + "_1R2S-rot" + rot_name):
                 shutil.rmtree(enz_path + "/" + pdb + "_1R2S-rot" + rot_name)
         try:
             with open(enz_path + "/" + pdb + "_1R2S-rot" + rot_name + '/' + enz_name_1r2s, 'r') as pf:
@@ -268,7 +268,7 @@ def read_variant_scores(enz_path, preferred_stereoisomer, baseline_dGs=None, \
                         os.remove(enz_path + "/" + pdb + "_1S2R-rot" + rot_name + '/' + decoy)
         else:
             xls_row_info.append(None) # [55]
-            if remove_redundant_decoys:
+            if remove_redundant_decoys and os.path.isdir(enz_path + "/" + pdb + "_1S2R-rot" + rot_name):
                 shutil.rmtree(enz_path + "/" + pdb + "_1S2R-rot" + rot_name)
         try:
             with open(enz_path + "/" + pdb + "_1S2R-rot" + rot_name + '/' + enz_name_1s2r, 'r') as pf:
