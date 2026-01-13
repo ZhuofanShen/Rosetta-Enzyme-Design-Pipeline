@@ -471,13 +471,12 @@ if __name__ == "__main__":
                 if os.path.isfile(relax_script):
                     with open(relax_script, "r") as pf:
                         tokens = shlex.split(pf.read())
-                    if "-muts" not in tokens:
-                        continue
-                    idx = tokens.index("-muts") + 1
                     muts = []
-                    while idx < len(tokens) and not tokens[idx].startswith("-"):
-                        muts.append(tokens[idx])
-                        idx += 1
+                    if "-muts" in tokens:
+                        idx = tokens.index("-muts") + 1
+                        while idx < len(tokens) and not tokens[idx].startswith("-"):
+                            muts.append(tokens[idx])
+                            idx += 1
                     muts_formatted = "_".join([mut.replace(",", "") for mut in muts])
                 for enz_var in filter(lambda x: os.path.isdir(os.path.join(relax_path, x)) and x.startswith(pdb + "_"), \
                             sorted(os.listdir(relax_path))):
