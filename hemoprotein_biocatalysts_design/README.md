@@ -28,15 +28,6 @@ $HOME/Rosetta-Enzyme-Design-Pipeline/
 │   └── substrates/
 │       └──cyclopropanation_styrene_EDA/
 │       └──cyclopropanation_p-CF3-styrene_EDA/
-
-enzdes_utils/
-Core PyRosetta utilities (FastDesign, relax, scoring).
-
-scripts/
-Pipeline driver scripts and Slurm submission templates.
-
-hemoprotein_biocatalysts_design/
-Project-specific working directory (inputs, intermediates, outputs).
 ```
 
 ## Step 1 — Preprocess Raw PDBs and WT Relaxation
