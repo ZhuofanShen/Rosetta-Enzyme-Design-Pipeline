@@ -22,8 +22,12 @@ $HOME/Rosetta-Enzyme-Design-Pipeline/
 ├── hemoprotein_biocatalysts_design/
 │   └── pdb/
 │       └── ${PDB_ID}.pdb
-└── scripts/
-
+│   └── scripts/
+│       └──xxx.py
+│       └──xxx.pbs
+│   └── substrates/
+│       └──cyclopropanation_styrene_EDA/
+│       └──cyclopropanation_p-CF3-styrene_EDA/
 
 enzdes_utils/
 Core PyRosetta utilities (FastDesign, relax, scoring).
