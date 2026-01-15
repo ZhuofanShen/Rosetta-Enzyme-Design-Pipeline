@@ -88,10 +88,12 @@ hemoprotein_biocatalysts_design/
 **1.3 WT pre-relaxation**
 
 Submit Slurm jobs:
+
 `sbatch scripts/fast_relax_raw_WT_pdb.pbs`
 
 After all jobs finish, select the best relaxed WT structure:
-`python scripts/get_best_relaxed_decoy.py HEM_monomer -s 1`
+
+`python scripts/get_best_relaxed_pdbs.py HEM_monomer -s 1`
 
 -s 1 indicates step-1 WT relaxation, not variant–TS relaxation.
 
@@ -208,7 +210,7 @@ Corresponds to **Supplementary Data 3**
 Extract best relaxed decoys:
 ```bash
 cd HEM/${PDB_ID}/cyclopropanation_styrene_EDA_distal
-python ../../../../scripts/get_best_relaxed_decoys.py FastDesign_Relax -s 2
+python ../../../../scripts/get_best_relaxed_pdbs.py FastDesign_Relax -s 2
 ```
 
 -s 2 indicates variant–TS relaxation.
