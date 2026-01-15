@@ -37,40 +37,17 @@ if __name__ == "__main__":
         for pdb in os.listdir(args.dir):
             if os.path.isfile(args.dir + '/' + pdb + '/' + pdb + '_relaxed.pdb'):
                 continue
-            #1
-            if os.path.isdir(args.dir + '/' + pdb + '/relax1'):
-                if not os.path.isfile(args.dir + '/' + pdb + '/relax1/' + pdb + '_clean_relaxed.fasc') and \
-                        not os.path.isfile(args.dir + '/' + pdb + '/relax1/' + pdb + '_mono_relaxed.fasc'):
-                    shutil.rmtree(args.dir + '/' + pdb + '/relax1')
-                    continue
-                scores1 = read_scores_from_fasc(args.dir + '/' + pdb + '/relax1')
-                for name1, score1 in extract_n_decoys(scores1, 1).items():
-                    break
-            else:
-                name1 = "None"
-                score1 = 100000000
-            #2
-            if os.path.isdir(args.dir + '/' + pdb + '/relax2'):
-                if not os.path.isfile(args.dir + '/' + pdb + '/relax2/' + pdb + '_clean_relaxed.fasc') and \
-                        not os.path.isfile(args.dir + '/' + pdb + '/relax2/' + pdb + '_mono_relaxed.fasc'):
-                    shutil.rmtree(args.dir + '/' + pdb + '/relax2')
-                    continue
-                scores2 = read_scores_from_fasc(args.dir + '/' + pdb + '/relax2')
-                for name2, score2 in extract_n_decoys(scores2, 1).items():
-                    break
-            else:
-                name2 = "None"
-                score2 = 100000000
-            #clash
-            if (score1 > 0 and score1 != 100000000) or (score2 > 0 and score2 != 100000000):
-                with open(args.dir + '/clash', 'a') as pf:
-                    pf.write(pdb + '\n')
-                continue
-            #compare
-            if score1 <= score2 and score1 != 100000000 and score2 != 100000000:
-                shutil.copy(args.dir + '/' + pdb + '/relax1/' + name1, args.dir + '/' + pdb + '/' + pdb + '_relaxed.pdb')
-            else:
-                shutil.copy(args.dir + '/' + pdb + '/relax2/' + name2, args.dir + '/' + pdb + '/' + pdb + '_relaxed.pdb')
+            best_score = 100000000
+            for i in range(1, 11):
+                if os.path.isdir(args.dir + '/' + pdb + '/relax' + str(i)):
+                    scores1 = read_scores_from_fasc(args.dir + '/' + pdb + '/relax' + str(i))
+                    for name1, score1 in extract_n_decoys(scores1, 1).items():
+                        break
+                    if score1 < best_score:
+                        best_score = score1
+                        best_decoy = name1
+            shutil.copy(args.dir + '/' + pdb + '/relax' + str(i) + '/' + best_decoy, args.dir + '/' + pdb + '/' + pdb + '_relaxed.pdb')
+
     elif args.step == 2:
         pr = args.dir.split("_")[0]
         scores = read_scores_from_fasc(args.dir + '/' + pr)
