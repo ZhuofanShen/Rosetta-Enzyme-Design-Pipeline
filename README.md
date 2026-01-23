@@ -5,7 +5,7 @@ The official GitHub repository for the Nature Communications paper "Computationa
 
 A Rosetta/PyRosetta–based workflow for designing and optimizing enzyme active sites.
 
-The core of the workflow is a PyRosetta module/script **`enzdes_utils.py`**. All operations—including introducing point mutations and optimizing protein–substrate complexes—are performed by calling this script.  
+The core of the workflow is a PyRosetta module/script **`enzdes_utils/fast_design.py`**. All operations—including introducing point mutations and optimizing protein–substrate complexes—are performed by calling this script.  
 Example projects are included in the repository (e.g., `hemoprotein_biocatalysts_design/` and `protein_stapling/`). 
 
 ---
